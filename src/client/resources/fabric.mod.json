@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "id": "crosshair-corsair-justfatlard",
+  "version": "${version}",
+  "name": "Crosshair Corsair",
+  "description": "Opinionated tweaks to whatever your crosshair is pointing at: a styleable selection box, and reacharound placement for bridging without looking down.",
+  "authors": [
+    "justfatlard"
+  ],
+  "contact": {
+    "sources": "https://github.com/fatlard1993/crosshair-corsair"
+  },
+  "license": "MIT",
+  "icon": "assets/crosshair-corsair-justfatlard/icon.png",
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "justfatlard.crosshair_corsair.Main"
+    ]
+  },
+  "mixins": [
+    "crosshair-corsair-justfatlard.client.mixins.json"
+  ],
+  "depends": {
+    "fabricloader": ">=${loaderVersion}",
+    "fabric-api": "${fabricApiVersion}",
+    "minecraft": "${minecraftDependency}",
+    "java": ">=25"
+  }
+}

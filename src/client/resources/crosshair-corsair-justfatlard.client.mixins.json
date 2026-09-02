@@ -1,0 +1,11 @@
+{
+  "required": true,
+  "package": "justfatlard.crosshair_corsair.mixin",
+  "compatibilityLevel": "JAVA_25",
+  "client": [
+    "UseItemMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
