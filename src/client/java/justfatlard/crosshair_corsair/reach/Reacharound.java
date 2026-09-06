@@ -9,11 +9,17 @@ import net.minecraft.core.Direction;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.item.BlockItem;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.component.SwingAnimation;
+import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.level.block.state.properties.Half;
+import net.minecraft.world.level.block.state.properties.SlabType;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.phys.shapes.CollisionContext;
 
 /**
  * Placing a block against something you are standing on rather than something you are looking at.
@@ -49,29 +55,48 @@ public final class Reacharound {
 	public static final int PLACE_DELAY_TICKS = 4;
 
 	/**
+	 * How far up a side face the click lands when the block being extended sits in the top half of
+	 * its space.
+	 *
+	 * <p>A slab or a stair decides which half it goes in from where on the face it was clicked, so a
+	 * click at the exact centre of the face makes a bottom slab every time - and a bridge of top
+	 * slabs drops half a block with each placement. Aiming above the middle keeps the surface level
+	 * with the one you are standing on.
+	 */
+	private static final double UPPER_HALF_CLICK = 0.25;
+
+	/**
 	 * A placement waiting to happen.
 	 *
-	 * @param against the existing block whose face is being clicked
-	 * @param face    the side of it that the new block goes on
+	 * @param hit     the click this placement stands for: the face of an existing block, aimed
+	 *                where a hand would aim it
 	 * @param hand    the hand holding the block
+	 * @param blocked whether the server would refuse it anyway: something standing in the space,
+	 *                or a block that cannot survive there. Still worth drawing, in a colour that
+	 *                says so, because an outline that vanishes when a cow wanders in leaves the
+	 *                player wondering what they did.
 	 */
-	public record Target(BlockPos against, Direction face, InteractionHand hand) {
+	public record Target(BlockHitResult hit, InteractionHand hand, boolean blocked) {
+		public BlockPos against() { return hit.getBlockPos(); }
+
+		public Direction face() { return hit.getDirection(); }
+
 		/** Where the block will actually end up. */
 		public BlockPos placeAt() {
-			return against.relative(face);
+			return against().relative(face());
 		}
 	}
 
 	/**
 	 * The reacharound placement available right now, or null if there is not one.
 	 *
-	 * <p>Cheap enough to call every frame: a couple of block lookups and no allocation beyond the
-	 * result. Calling it per frame rather than caching a tick's answer is what keeps the outline
-	 * honest while the player is still turning.
+	 * <p>Cheap enough to call every frame: a few block lookups and a dry run of the placement, with
+	 * no world changed. Calling it per frame rather than caching a tick's answer is what keeps the
+	 * outline honest while the player is still turning.
 	 */
 	public static Target find(Minecraft minecraft) {
 		CorsairConfig.Reacharound settings = CorsairConfig.get().reacharound;
-		if (!settings.horizontal && !settings.vertical) return null;
+		if (!settings.enabled || (!settings.horizontal && !settings.vertical)) return null;
 
 		LocalPlayer player = minecraft.player;
 		ClientLevel level = minecraft.level;
@@ -79,9 +104,7 @@ public final class Reacharound {
 
 		// The whole premise: vanilla has nothing under the crosshair. A hit on a block or an entity
 		// is a placement or an interaction the player already asked for by name.
-		if (minecraft.hitResult == null || minecraft.hitResult.getType() != HitResult.Type.MISS) {
-			return null;
-		}
+		if (minecraft.hitResult == null || minecraft.hitResult.getType() != HitResult.Type.MISS) return null;
 
 		// Mid-swing at a block, or already eating, drawing a bow, riding something. Checked here
 		// rather than at the click so that the outline disappears at the same moment the placement
@@ -94,12 +117,16 @@ public final class Reacharound {
 		BlockPos reference = referenceBlock(player, settings);
 		if (reference == null) return null;
 
-		if (!canPlaceAgainst(level.getBlockState(reference))) return null;
+		BlockState against = level.getBlockState(reference);
+		if (!canPlaceAgainst(against)) return null;
 
 		Direction facing = player.getDirection();
-		if (!level.getBlockState(reference.relative(facing)).canBeReplaced()) return null;
+		BlockPos at = reference.relative(facing);
+		if (level.isOutsideBuildHeight(at)) return null;
+		if (!level.getBlockState(at).canBeReplaced()) return null;
 
-		return new Target(reference, facing, hand);
+		BlockHitResult hit = hitFor(reference, facing, against);
+		return new Target(hit, hand, !wouldSucceed(player, level, hand, hit, at));
 	}
 
 	/**
@@ -147,12 +174,43 @@ public final class Reacharound {
 	 * <p>Aimed at the centre of the face, derived from the two block positions rather than from a
 	 * direction vector - the arithmetic is the same and it cannot be broken by a renamed accessor.
 	 * The server checks that the hit location sits on the block it claims to be on, and a face
-	 * centre satisfies that with room to spare.
+	 * centre satisfies that with room to spare. On a side face of a block that lives in the top
+	 * half of its space, the click moves up to match.
 	 */
-	public static BlockHitResult hitFor(Target target) {
-		Vec3 centre = Vec3.atCenterOf(target.against());
-		Vec3 towardFace = Vec3.atCenterOf(target.placeAt()).subtract(centre).scale(0.5);
-		return new BlockHitResult(centre.add(towardFace), target.face(), target.against(), false);
+	private static BlockHitResult hitFor(BlockPos against, Direction face, BlockState againstState) {
+		Vec3 centre = Vec3.atCenterOf(against);
+		Vec3 towardFace = Vec3.atCenterOf(against.relative(face)).subtract(centre).scale(0.5);
+		Vec3 location = centre.add(towardFace);
+		if (face.getAxis().isHorizontal() && upperHalf(againstState)) {
+			location = location.add(0, UPPER_HALF_CLICK, 0);
+		}
+		return new BlockHitResult(location, face, against, false);
+	}
+
+	/** A top slab, an upside-down stair, a trapdoor on the ceiling: anything drawn in its top half. */
+	private static boolean upperHalf(BlockState state) {
+		if (state.hasProperty(BlockStateProperties.SLAB_TYPE)) {
+			return state.getValue(BlockStateProperties.SLAB_TYPE) == SlabType.TOP;
+		}
+		return state.hasProperty(BlockStateProperties.HALF)
+			&& state.getValue(BlockStateProperties.HALF) == Half.TOP;
+	}
+
+	/**
+	 * The two checks the server's placement code runs after everything else has passed: the block
+	 * has to be able to stand where it lands, and nothing can be standing there already.
+	 *
+	 * <p>Asked of the same state the click will produce, from the same context, so a torch with no
+	 * wall or a cow in the way is known before the click rather than after it.
+	 */
+	private static boolean wouldSucceed(LocalPlayer player, ClientLevel level, InteractionHand hand,
+			BlockHitResult hit, BlockPos at) {
+		ItemStack stack = player.getItemInHand(hand);
+		BlockPlaceContext context = new BlockPlaceContext(player, hand, stack, hit);
+		BlockState placed = ((BlockItem) stack.getItem()).getBlock().getStateForPlacement(context);
+		return placed != null
+			&& placed.canSurvive(level, at)
+			&& level.isUnobstructed(placed, at, CollisionContext.placementContext(player));
 	}
 
 	/**
@@ -162,17 +220,24 @@ public final class Reacharound {
 	 */
 	public static boolean place(Minecraft minecraft, Target target) {
 		LocalPlayer player = minecraft.player;
-		if (player == null || minecraft.gameMode == null) return false;
+		if (player == null || minecraft.gameMode == null || target.blocked()) return false;
 
 		// Read before the placement, because a successful one shrinks the stack it came from and
 		// an emptied stack has no animation left to ask about.
-		SwingAnimation animation = player.getItemInHand(target.hand()).getInteractAnimation();
+		ItemStack stack = player.getItemInHand(target.hand());
+		SwingAnimation animation = stack.getInteractAnimation();
+		int count = stack.getCount();
 
-		InteractionResult result = minecraft.gameMode.useItemOn(player, target.hand(), hitFor(target));
+		InteractionResult result = minecraft.gameMode.useItemOn(player, target.hand(), target.hit());
 		if (!(result instanceof InteractionResult.Success success)) return false;
 
 		if (success.swingSource() == InteractionResult.SwingSource.PREDICTED) {
 			player.swing(target.hand(), animation, true);
+		}
+		// The hand's own bob on a placement, on the same terms vanilla grants it: something left
+		// the stack, or nothing ever leaves it.
+		if (!stack.isEmpty() && (stack.getCount() != count || player.hasInfiniteMaterials())) {
+			player.itemUsed(target.hand());
 		}
 		return true;
 	}

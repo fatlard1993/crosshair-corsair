@@ -1,5 +1,7 @@
 package justfatlard.crosshair_corsair;
 
+import justfatlard.crosshair_corsair.integration.PandoricalSettings;
+import justfatlard.crosshair_corsair.reach.ToggleKey;
 import justfatlard.crosshair_corsair.render.BlockOutlines;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
@@ -8,8 +10,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Two opinions about the thing under your crosshair: what it looks like when there is one, and what
- * happens when there is not.
+ * Opinions about the crosshair: what it looks like given what is under it and what is in your hand,
+ * what the thing under it looks like, and what happens when there is nothing under it at all.
  *
  * <p>Client-side and nothing else. The reacharound places blocks through the same packet an
  * ordinary click sends, against a face that is genuinely there and well inside reach, so a vanilla
@@ -41,7 +43,15 @@ public class Main implements ClientModInitializer {
 			CorsairConfig.reloadIfChanged();
 		});
 
+		ToggleKey.register();
+		PandoricalSettings.register();
+
 		LevelRenderEvents.BEFORE_BLOCK_OUTLINE.register(BlockOutlines::beforeBlockOutline);
+		// The crosshair itself, in vanilla's slot so it keeps vanilla's order against the rest of
+		// the HUD, with vanilla's element kept for the cases this one would only be copying.
+		net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry.replaceElement(
+			net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements.CROSSHAIR,
+			justfatlard.crosshair_corsair.crosshair.CrosshairElement::new);
 
 		LOGGER.info("Crosshair Corsair loaded");
 	}

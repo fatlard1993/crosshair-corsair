@@ -26,6 +26,23 @@ dependencies {
 	minecraft "com.mojang:minecraft:${project.minecraft_version}"
 	implementation "net.fabricmc:fabric-loader:${project.loader_version}"
 	implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
+
+	// Optional: pandorical integration, compile-only and never bundled. Resolved by the version
+	// pandorical declares rather than a version written down here, because Gradle never clears
+	// build/libs and a hardcoded one keeps compiling green against a jar an old build left behind.
+	def pandoricalProperties = file("../pandorical/gradle.properties")
+	if (pandoricalProperties.exists()) {
+		def pandoricalVersion = new Properties().with {
+			pandoricalProperties.withInputStream { load(it) }
+			getProperty("mod_version")
+		}
+		def pandoricalJar = file("../pandorical/build/libs/pandorical-${pandoricalVersion}.jar")
+		if (!pandoricalJar.exists()) {
+			throw new GradleException("pandorical ${pandoricalVersion} is not built. Run `mc-build pandorical`" +
+				" (or ./gradlew build in ../pandorical) first - this mod compiles against its API.")
+		}
+		compileOnly files(pandoricalJar)
+	}
 }
 
 // Fabric tests these predicates against the loader's *normalized* game version,
@@ -69,5 +86,9 @@ java {
 jar {
 	from("LICENSE") {
 		rename { "${it}_${project.base.archivesName.get()}"}
+	}
+	// The readme rides in the jar beside the licence, so a server can show it in-game.
+	from("README.md") {
+		rename { "README_${project.base.archivesName.get()}.md" }
 	}
 }

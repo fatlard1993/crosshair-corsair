@@ -3,7 +3,8 @@
   "package": "justfatlard.crosshair_corsair.mixin",
   "compatibilityLevel": "JAVA_25",
   "client": [
-    "UseItemMixin"
+    "UseItemMixin",
+    "GameModeDestroyAccessor"
   ],
   "injectors": {
     "defaultRequire": 1

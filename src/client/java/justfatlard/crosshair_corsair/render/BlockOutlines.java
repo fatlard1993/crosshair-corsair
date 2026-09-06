@@ -45,8 +45,44 @@ public final class BlockOutlines {
 
 		if (!config.stylesSelectionBox()) return true;
 
-		draw(context, outline.shape(), outline.pos(), config.outlineArgb(), outline.isTranslucent());
+		int argb = blink(config.outlineArgb(), config.selectionBox);
+		Breaking breaking = breaking(outline.pos(), config.selectionBox);
+		if (breaking.mode == Breaking.Mode.ALPHA) argb = withAlpha(argb, (int) ((argb >>> 24) * (1 - breaking.progress)));
+		draw(context, outline.shape(), outline.pos(), argb, outline.isTranslucent(), breaking);
 		return false;
+	}
+
+	/** The outline's colour with the blink applied: a sine on the alpha, clamped to sense. */
+	private static int blink(int argb, CorsairConfig.SelectionBox box) {
+		if (box.blinkAlpha <= 0 || box.blinkSpeed <= 0) return argb;
+		double seconds = System.currentTimeMillis() / 1000.0;
+		int swing = (int) (box.blinkAlpha * Math.sin(seconds * box.blinkSpeed * Math.PI * 2));
+		return withAlpha(argb, Math.clamp((argb >>> 24) + swing, 0, 255));
+	}
+
+	private static int withAlpha(int argb, int alpha) {
+		return (Math.clamp(alpha, 0, 255) << 24) | (argb & 0xFFFFFF);
+	}
+
+	/** What the box does to itself as the block under it is mined. */
+	private record Breaking(Mode mode, float progress) {
+		enum Mode { NONE, SHRINK, DOWN, ALPHA }
+		static final Breaking NONE = new Breaking(Mode.NONE, 0F);
+	}
+
+	private static Breaking breaking(BlockPos pos, CorsairConfig.SelectionBox box) {
+		Breaking.Mode mode = switch (box.breakAnimation == null ? "none" : box.breakAnimation.trim().toLowerCase(java.util.Locale.ROOT)) {
+			case "shrink" -> Breaking.Mode.SHRINK;
+			case "down" -> Breaking.Mode.DOWN;
+			case "alpha" -> Breaking.Mode.ALPHA;
+			default -> Breaking.Mode.NONE;
+		};
+		if (mode == Breaking.Mode.NONE) return Breaking.NONE;
+		var gameMode = Minecraft.getInstance().gameMode;
+		if (gameMode == null || !gameMode.isDestroying()) return Breaking.NONE;
+		var digging = (justfatlard.crosshair_corsair.mixin.GameModeDestroyAccessor) gameMode;
+		if (!pos.equals(digging.corsair$destroyBlockPos())) return Breaking.NONE;
+		return new Breaking(mode, Math.clamp(digging.corsair$destroyProgress(), 0F, 1F));
 	}
 
 	private static void drawReacharoundGhost(LevelRenderContext context, CorsairConfig config) {
@@ -55,11 +91,12 @@ public final class BlockOutlines {
 		Reacharound.Target target = Reacharound.find(Minecraft.getInstance());
 		if (target == null) return;
 
-		draw(context, Shapes.block(), target.placeAt(), config.ghostArgb(), false);
+		int argb = target.blocked() ? config.blockedArgb() : config.ghostArgb();
+		draw(context, Shapes.block(), target.placeAt(), argb, false, Breaking.NONE);
 	}
 
 	private static void draw(LevelRenderContext context, VoxelShape shape, BlockPos pos, int argb,
-			boolean translucentShape) {
+			boolean translucentShape, Breaking breaking) {
 		// The incoming stack is camera-relative world space - vanilla does its own push and
 		// translate further down the method this runs in front of, so nothing has been applied yet.
 		PoseStack pose = context.poseStack();
@@ -67,6 +104,16 @@ public final class BlockOutlines {
 
 		pose.pushPose();
 		pose.translate(pos.getX() - camera.x, pos.getY() - camera.y, pos.getZ() - camera.z);
+		// The break animations are transforms on the pose rather than on the shape, so a stair
+		// or a fence shrinks as the shape it is and not as its bounding box.
+		if (breaking.mode() == Breaking.Mode.SHRINK) {
+			float scale = 1F - breaking.progress();
+			pose.translate(0.5, 0.5, 0.5);
+			pose.scale(scale, scale, scale);
+			pose.translate(-0.5, -0.5, -0.5);
+		} else if (breaking.mode() == Breaking.Mode.DOWN) {
+			pose.scale(1F, 1F - breaking.progress(), 1F);
+		}
 		context.submitNodeCollector()
 			.submitShapeOutline(pose, shape, lineType(context), argb, lineWidth(context), translucentShape);
 		pose.popPose();

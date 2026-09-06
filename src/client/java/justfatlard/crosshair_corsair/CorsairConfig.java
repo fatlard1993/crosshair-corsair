@@ -23,6 +23,71 @@ public final class CorsairConfig {
 
 	public SelectionBox selectionBox = new SelectionBox();
 	public Reacharound reacharound = new Reacharound();
+	public Crosshair crosshair = new Crosshair();
+
+	/**
+	 * The crosshair itself: when it shows, and what shape it takes.
+	 *
+	 * <p>Policies are words rather than booleans because "show it" has more than two answers for
+	 * a held item: {@code always}, {@code targeting} (something under the crosshair), or
+	 * {@code interactable} (the item would do something to what is there), and {@code never}.
+	 * Styles are names from {@link justfatlard.crosshair_corsair.crosshair.CrosshairStyle}.
+	 */
+	public static final class Crosshair {
+		public boolean enabled = true;
+		/** Nothing under the crosshair and nothing useful in hand: no crosshair. */
+		public boolean hideWhenIdle = true;
+		public boolean thirdPerson = false;
+
+		public boolean onBlock = true;
+		public boolean onInteractableBlock = true;
+		public boolean onEntity = true;
+
+		/** always | targeting */
+		public String holdingTool = "always";
+		/** A dot in the middle when the tool in hand is the right one for the block it is on. */
+		public boolean correctToolDot = true;
+		public boolean holdingMeleeWeapon = true;
+		/** Only show the melee style when there is something to hit. */
+		public boolean meleeOnlyOnEntity = false;
+		/** always | interactable */
+		public String holdingRangedWeapon = "always";
+		/** always | interactable */
+		public String holdingThrowable = "interactable";
+		public boolean holdingShield = true;
+		/** always | targeting | interactable | never */
+		public String holdingBlock = "interactable";
+		public boolean holdingBlockInOffhand = true;
+		/** always | interactable */
+		public String holdingUsableItem = "interactable";
+		/** Round brackets around the crosshair when a use would do something. */
+		public boolean usableBrackets = true;
+
+		public boolean overrideColor = false;
+		public String color = "#FFFFFF";
+		/** Vanilla's inverted blend, so the crosshair reads on any background. Off draws it plain. */
+		public boolean blend = true;
+
+		public Styles styles = new Styles();
+
+		public static final class Styles {
+			public String regular = "cross";
+			public String onBlock = "cross";
+			public String onInteractableBlock = "cross";
+			public String onEntity = "cross_open";
+			public String holdingTool = "cross";
+			public String holdingMeleeWeapon = "cross";
+			public String holdingRangedWeapon = "circle";
+			public String holdingThrowable = "circle_large";
+			public String holdingShield = "brackets";
+			public String holdingBlock = "square";
+			public String holdingUsableItem = "cross";
+			/** The reacharound would place at your feet: a line under the crosshair, like a floor. */
+			public String reacharoundFloor = "line_bottom";
+			/** Or over your head: a caret, pointing up. */
+			public String reacharoundCeiling = "caret";
+		}
+	}
 
 	/** How the block you are looking at is outlined. */
 	public static final class SelectionBox {
@@ -41,10 +106,21 @@ public final class CorsairConfig {
 		 * weight at any resolution. Setting a number here opts out of that scaling.
 		 */
 		public float lineWidth = 0.0F;
+		/**
+		 * A pulse on the outline's alpha: how far it swings, in alpha units, and how many swings a
+		 * second. Zero swing is a steady line, which is vanilla.
+		 */
+		public int blinkAlpha = 0;
+		public float blinkSpeed = 1.0F;
+		/** none | shrink | down | alpha: what the box does as the block under it breaks. */
+		public String breakAnimation = "none";
 	}
 
 	/** Placing against a block you are not looking at. */
 	public static final class Reacharound {
+		/** The whole feature, which the toggle key also flips. Both modes below sit under it. */
+		public boolean enabled = true;
+
 		/**
 		 * Extend the floor you are standing on, in the direction you face.
 		 *
@@ -62,16 +138,24 @@ public final class CorsairConfig {
 
 		public String ghostColor = "#FFFFFF";
 		public int ghostAlpha = 120;
+		/**
+		 * The outline when the block would land there but the server would refuse it: something
+		 * standing in the space, or a block that cannot stand there. Same opacity as the ghost.
+		 */
+		public String blockedColor = "#FF5555";
 	}
 
 	// --- derived, so the strings are parsed once rather than per frame ---
 
 	private transient int outlineArgb = argb("#000000", 102);
 	private transient int ghostArgb = argb("#FFFFFF", 120);
+	private transient int blockedArgb = argb("#FF5555", 120);
 
 	public int outlineArgb() { return outlineArgb; }
 
 	public int ghostArgb() { return ghostArgb; }
+
+	public int blockedArgb() { return blockedArgb; }
 
 	/**
 	 * Whether the configured style differs from what vanilla would draw anyway.
@@ -134,19 +218,46 @@ public final class CorsairConfig {
 			// defaulting them, and a null here would be a crash inside the render loop.
 			if (loaded.selectionBox == null) loaded.selectionBox = new SelectionBox();
 			if (loaded.reacharound == null) loaded.reacharound = new Reacharound();
+			if (loaded.crosshair == null) loaded.crosshair = new Crosshair();
+			if (loaded.crosshair.styles == null) loaded.crosshair.styles = new Crosshair.Styles();
 
 			loaded.derive();
 			current = loaded;
+			justfatlard.crosshair_corsair.integration.PandoricalSettings.changed();
 		} catch (Exception e) {
 			Main.LOGGER.warn("Could not read {} - keeping the settings already loaded",
 				FILE_NAME, e);
 		}
 	}
 
+	/**
+	 * Write the current settings out, for a change that came from somewhere other than the file:
+	 * the mod menu. The file stays the source of truth, so the change goes there first and the
+	 * poll picks it back up like any other edit.
+	 */
+	public static void save() {
+		try {
+			Path path = path();
+			Files.createDirectories(path.getParent());
+			current.derive();
+			Files.writeString(path, GSON.toJson(current));
+			lastModified = Files.getLastModifiedTime(path).toMillis();
+		} catch (Exception e) {
+			Main.LOGGER.warn("Could not write {}", FILE_NAME, e);
+		}
+	}
+
 	private void derive() {
 		outlineArgb = argb(selectionBox.color, selectionBox.alpha);
 		ghostArgb = argb(reacharound.ghostColor, reacharound.ghostAlpha);
+		blockedArgb = argb(reacharound.blockedColor, reacharound.ghostAlpha);
+		crosshairArgb = argb(crosshair.color, 255);
 	}
+
+	private transient int crosshairArgb;
+
+	/** The crosshair's override colour, opaque; only meaningful when the override is on. */
+	public int crosshairArgb() { return crosshairArgb; }
 
 	/**
 	 * A {@code #RRGGBB} string and an alpha, packed the way the renderer wants them.
