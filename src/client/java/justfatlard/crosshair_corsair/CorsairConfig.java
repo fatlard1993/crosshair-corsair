@@ -4,20 +4,20 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Locale;
+import justfatlard.crosshair_corsair.integration.PandoricalSettings;
 import net.fabricmc.loader.api.FabricLoader;
 
 /**
  * The mod's opinions, in {@code config/crosshair-corsair.json}.
  *
- * <p>Written out in full on first run - defaults and all - so every knob is discoverable in the
- * file rather than only in a readme, and re-read whenever the file changes on disk. Tuning a colour
- * is a look-at-it-and-adjust loop, and a loop that costs a game restart per step is a loop nobody
- * runs twice.
+ * <p>Written out in full whenever the file on disk is missing anything, so every knob is
+ * discoverable in the file rather than only in a readme, and re-read whenever the file changes.
+ * Tuning a colour is a look-at-it-and-adjust loop, and a loop that costs a game restart per step is
+ * a loop nobody runs twice.
  *
- * <p>The selection box defaults to vanilla's exact appearance and the reacharound defaults to on.
- * An opinionated mod should still arrive without opinions already applied to things the player did
- * not ask about: the styling is here to be reached for, while the reacharound is the reason the mod
- * exists.
+ * <p>The selection box defaults to vanilla's exact appearance and the reacharound defaults to on:
+ * the styling is here to be reached for, while the reacharound is the reason the mod exists.
  */
 public final class CorsairConfig {
 
@@ -25,13 +25,29 @@ public final class CorsairConfig {
 	public Reacharound reacharound = new Reacharound();
 	public Crosshair crosshair = new Crosshair();
 
+	/** What the outline does to itself as the block under it is mined. */
+	public enum BreakAnimation {
+		NONE, SHRINK, DOWN, ALPHA;
+
+		public static BreakAnimation named(String name) {
+			if (name == null) return NONE;
+			try {
+				return valueOf(name.trim().toUpperCase(Locale.ROOT));
+			} catch (IllegalArgumentException unknown) {
+				return NONE;
+			}
+		}
+
+		public String configName() {
+			return name().toLowerCase(Locale.ROOT);
+		}
+	}
+
 	/**
 	 * The crosshair itself: when it shows, and what shape it takes.
 	 *
-	 * <p>Policies are words rather than booleans because "show it" has more than two answers for
-	 * a held item: {@code always}, {@code targeting} (something under the crosshair), or
-	 * {@code interactable} (the item would do something to what is there), and {@code never}.
-	 * Styles are names from {@link justfatlard.crosshair_corsair.crosshair.CrosshairStyle}.
+	 * <p>Held-item settings take a word from {@link justfatlard.crosshair_corsair.crosshair.Policy};
+	 * styles take a name from {@link justfatlard.crosshair_corsair.crosshair.CrosshairStyle}.
 	 */
 	public static final class Crosshair {
 		public boolean enabled = true;
@@ -43,22 +59,18 @@ public final class CorsairConfig {
 		public boolean onInteractableBlock = true;
 		public boolean onEntity = true;
 
-		/** always | targeting */
 		public String holdingTool = "always";
 		/** A dot in the middle when the tool in hand is the right one for the block it is on. */
 		public boolean correctToolDot = true;
 		public boolean holdingMeleeWeapon = true;
 		/** Only show the melee style when there is something to hit. */
 		public boolean meleeOnlyOnEntity = false;
-		/** always | interactable */
 		public String holdingRangedWeapon = "always";
-		/** always | interactable */
 		public String holdingThrowable = "interactable";
 		public boolean holdingShield = true;
-		/** always | targeting | interactable | never */
 		public String holdingBlock = "interactable";
+		/** Whether a block in the offhand counts when the main hand is empty. Gates the reacharound too. */
 		public boolean holdingBlockInOffhand = true;
-		/** always | interactable */
 		public String holdingUsableItem = "interactable";
 		/** Round brackets around the crosshair when a use would do something. */
 		public boolean usableBrackets = true;
@@ -112,7 +124,7 @@ public final class CorsairConfig {
 		 */
 		public int blinkAlpha = 0;
 		public float blinkSpeed = 1.0F;
-		/** none | shrink | down | alpha: what the box does as the block under it breaks. */
+		/** A word from {@link BreakAnimation}. */
 		public String breakAnimation = "none";
 	}
 
@@ -124,9 +136,8 @@ public final class CorsairConfig {
 		/**
 		 * Extend the floor you are standing on, in the direction you face.
 		 *
-		 * <p>The bridging case: you are at the edge of a drop with a block in hand, looking ahead
-		 * rather than down at your feet, and vanilla has nothing under the crosshair to place
-		 * against.
+		 * <p>The bridging case: at the edge of a drop with a block in hand, looking ahead rather
+		 * than down at your feet, and vanilla has nothing under the crosshair to place against.
 		 */
 		public boolean horizontal = true;
 
@@ -150,6 +161,8 @@ public final class CorsairConfig {
 	private transient int outlineArgb = argb("#000000", 102);
 	private transient int ghostArgb = argb("#FFFFFF", 120);
 	private transient int blockedArgb = argb("#FF5555", 120);
+	private transient int crosshairArgb = argb("#FFFFFF", 255);
+	private transient BreakAnimation breakAnimation = BreakAnimation.NONE;
 
 	public int outlineArgb() { return outlineArgb; }
 
@@ -157,16 +170,33 @@ public final class CorsairConfig {
 
 	public int blockedArgb() { return blockedArgb; }
 
+	/** The crosshair's override colour, opaque; only meaningful when the override is on. */
+	public int crosshairArgb() { return crosshairArgb; }
+
+	public BreakAnimation breakAnimation() { return breakAnimation; }
+
+	private void derive() {
+		outlineArgb = argb(selectionBox.color, selectionBox.alpha);
+		ghostArgb = argb(reacharound.ghostColor, reacharound.ghostAlpha);
+		blockedArgb = argb(reacharound.blockedColor, reacharound.ghostAlpha);
+		crosshairArgb = argb(crosshair.color, 255);
+		breakAnimation = BreakAnimation.named(selectionBox.breakAnimation);
+	}
+
 	/**
-	 * Whether the configured style differs from what vanilla would draw anyway.
+	 * Whether anything here would draw the outline differently from vanilla.
 	 *
-	 * <p>When it does not, vanilla is left to draw its own outline rather than being replaced by an
-	 * identical-looking copy. That keeps the default install on the game's own code path, and it
-	 * keeps the debug shape overlays - which live inside the method being replaced - working for
-	 * anyone who has them switched on.
+	 * <p>When nothing would, vanilla is left to draw its own rather than being replaced by an
+	 * identical-looking copy - which keeps the default install on the game's own code path and
+	 * keeps the debug shape overlays, which live inside the method being replaced, working. The
+	 * blink and the break animation have to be counted here: they are invisible on any frame this
+	 * returns false, and leaving them out made both of them silently inert at default colours.
 	 */
 	public boolean stylesSelectionBox() {
-		return outlineArgb != VANILLA_OUTLINE_ARGB || selectionBox.lineWidth > 0.0F;
+		return outlineArgb != VANILLA_OUTLINE_ARGB
+			|| selectionBox.lineWidth > 0.0F
+			|| (selectionBox.blinkAlpha > 0 && selectionBox.blinkSpeed > 0)
+			|| breakAnimation != BreakAnimation.NONE;
 	}
 
 	/** Vanilla's outline: black at alpha 102. */
@@ -196,14 +226,11 @@ public final class CorsairConfig {
 		Path path = path();
 		try {
 			if (!Files.exists(path)) {
-				// Gone, or never written. Write the current shape back out so the file the player
-				// is looking for exists, and so a hand-deleted file resets to defaults rather than
+				// Gone, or never written. Write the current shape out so the file the player is
+				// looking for exists, and so a hand-deleted file resets to defaults rather than
 				// leaving the mod running on settings with no visible source.
 				current = new CorsairConfig();
-				current.derive();
-				Files.createDirectories(path.getParent());
-				Files.writeString(path, GSON.toJson(current));
-				lastModified = Files.getLastModifiedTime(path).toMillis();
+				write(path, current);
 				return;
 			}
 
@@ -211,11 +238,12 @@ public final class CorsairConfig {
 			if (modified == lastModified) return;
 			lastModified = modified;
 
-			CorsairConfig loaded = GSON.fromJson(Files.readString(path), CorsairConfig.class);
+			String text = Files.readString(path);
+			CorsairConfig loaded = GSON.fromJson(text, CorsairConfig.class);
 			if (loaded == null) return;
 
-			// A hand-edited file can be missing whole sections; Gson leaves those null rather than
-			// defaulting them, and a null here would be a crash inside the render loop.
+			// A hand-edited or older file can be missing whole sections; Gson leaves those null
+			// rather than defaulting them, and a null here would be a crash inside the render loop.
 			if (loaded.selectionBox == null) loaded.selectionBox = new SelectionBox();
 			if (loaded.reacharound == null) loaded.reacharound = new Reacharound();
 			if (loaded.crosshair == null) loaded.crosshair = new Crosshair();
@@ -223,57 +251,65 @@ public final class CorsairConfig {
 
 			loaded.derive();
 			current = loaded;
-			justfatlard.crosshair_corsair.integration.PandoricalSettings.changed();
+
+			// An upgrade adds keys the old file has never heard of, and filling them in memory
+			// alone leaves them undiscoverable in the one place this mod says to look for them.
+			String canonical = GSON.toJson(loaded);
+			if (!canonical.equals(text)) write(path, loaded);
+
+			PandoricalSettings.changed();
 		} catch (Exception e) {
-			Main.LOGGER.warn("Could not read {} - keeping the settings already loaded",
-				FILE_NAME, e);
+			Main.LOGGER.warn("Could not read {} - keeping the settings already loaded", FILE_NAME, e);
 		}
 	}
 
 	/**
 	 * Write the current settings out, for a change that came from somewhere other than the file:
-	 * the mod menu. The file stays the source of truth, so the change goes there first and the
-	 * poll picks it back up like any other edit.
+	 * the mod menu, or the toggle key. The file stays the source of truth.
 	 */
 	public static void save() {
 		try {
-			Path path = path();
-			Files.createDirectories(path.getParent());
-			current.derive();
-			Files.writeString(path, GSON.toJson(current));
-			lastModified = Files.getLastModifiedTime(path).toMillis();
+			write(path(), current);
 		} catch (Exception e) {
 			Main.LOGGER.warn("Could not write {}", FILE_NAME, e);
 		}
 	}
 
-	private void derive() {
-		outlineArgb = argb(selectionBox.color, selectionBox.alpha);
-		ghostArgb = argb(reacharound.ghostColor, reacharound.ghostAlpha);
-		blockedArgb = argb(reacharound.blockedColor, reacharound.ghostAlpha);
-		crosshairArgb = argb(crosshair.color, 255);
+	private static void write(Path path, CorsairConfig config) throws java.io.IOException {
+		config.derive();
+		Files.createDirectories(path.getParent());
+		Files.writeString(path, GSON.toJson(config));
+		lastModified = Files.getLastModifiedTime(path).toMillis();
 	}
-
-	private transient int crosshairArgb;
-
-	/** The crosshair's override colour, opaque; only meaningful when the override is on. */
-	public int crosshairArgb() { return crosshairArgb; }
 
 	/**
 	 * A {@code #RRGGBB} string and an alpha, packed the way the renderer wants them.
 	 *
-	 * <p>Colours are written as hex in the file because that is the form a person can copy out of
-	 * whatever they picked it in. A value that will not parse falls back to opaque white and says
-	 * so, rather than throwing from inside a frame.
+	 * <p>Colours are hex in the file because that is the form a person can copy out of whatever
+	 * they picked it in. {@code #abc} is accepted as the shorthand everyone means by it; anything
+	 * else that will not parse falls back to opaque white and says so, rather than throwing from
+	 * inside a frame or - worse - parsing to a colour nobody asked for.
 	 */
 	private static int argb(String hex, int alpha) {
 		int clamped = Math.clamp(alpha, 0, 255);
-		try {
-			String digits = hex.startsWith("#") ? hex.substring(1) : hex;
-			return (clamped << 24) | (Integer.parseInt(digits, 16) & 0xFFFFFF);
-		} catch (RuntimeException e) {
+		String digits = hex == null ? "" : hex.trim();
+		if (digits.startsWith("#")) digits = digits.substring(1);
+		if (digits.length() == 3) {
+			StringBuilder expanded = new StringBuilder(6);
+			for (int i = 0; i < 3; i++) expanded.append(digits.charAt(i)).append(digits.charAt(i));
+			digits = expanded.toString();
+		}
+		if (digits.length() != 6 || !isHex(digits)) {
 			Main.LOGGER.warn("'{}' is not a #RRGGBB colour - using white", hex);
 			return (clamped << 24) | 0xFFFFFF;
 		}
+		return (clamped << 24) | (Integer.parseInt(digits, 16) & 0xFFFFFF);
+	}
+
+	private static boolean isHex(String text) {
+		for (int i = 0; i < text.length(); i++) {
+			if (Character.digit(text.charAt(i), 16) < 0) return false;
+		}
+		return true;
 	}
 }

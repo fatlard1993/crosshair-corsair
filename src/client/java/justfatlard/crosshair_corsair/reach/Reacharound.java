@@ -6,10 +6,14 @@ import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.ItemUseAnimation;
+import net.minecraft.world.item.ProjectileItem;
+import net.minecraft.world.item.ProjectileWeaponItem;
 import net.minecraft.world.item.component.SwingAnimation;
 import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.block.state.BlockState;
@@ -29,10 +33,9 @@ import net.minecraft.world.phys.shapes.CollisionContext;
  * side of the block under your feet - so vanilla asks you to look down at it, place, look back up,
  * step, and look down again. The block you want is unambiguous; the looking is ceremony.
  *
- * <p>The rule that keeps this from being a nuisance is that it only ever fires when vanilla would
- * do nothing at all: the crosshair has to be on empty air, the destination has to be replaceable,
- * and there has to be a real block to place against. Aim at anything and the reacharound is not
- * consulted. It fills a gap rather than competing for the click.
+ * <p>It only fires on a click vanilla would spend on nothing: the crosshair on empty air, no item
+ * in either hand that would have used the click itself, a replaceable destination, and a real block
+ * to place against. It fills a gap rather than competing for the click.
  *
  * <p>One function answers both "where would it go" and "put it there", so the outline drawn ahead
  * of the click and the block that arrives after it cannot disagree.
@@ -40,15 +43,7 @@ import net.minecraft.world.phys.shapes.CollisionContext;
 public final class Reacharound {
 	private Reacharound() {}
 
-	/**
-	 * Where the pitch stops meaning "along the ground" and starts meaning "overhead", in degrees
-	 * above the horizon.
-	 *
-	 * <p>A single boundary rather than two with a dead zone between them: every angle belongs to
-	 * exactly one of the two modes, so there is no band where the mod silently does nothing for
-	 * reasons the player cannot see. Each mode is still switchable on its own, and a mode that is
-	 * off simply yields nothing in its half of the sky.
-	 */
+	/** Where the pitch stops meaning "along the ground" and starts meaning "overhead". */
 	private static final float OVERHEAD_PITCH = -45.0F;
 
 	/** Vanilla's own gap between one right-click placement and the next. */
@@ -58,23 +53,21 @@ public final class Reacharound {
 	 * How far up a side face the click lands when the block being extended sits in the top half of
 	 * its space.
 	 *
-	 * <p>A slab or a stair decides which half it goes in from where on the face it was clicked, so a
-	 * click at the exact centre of the face makes a bottom slab every time - and a bridge of top
-	 * slabs drops half a block with each placement. Aiming above the middle keeps the surface level
-	 * with the one you are standing on.
+	 * <p>A slab or a stair decides which half it goes in from where on the face it was clicked, and
+	 * a click at the exact centre makes a bottom slab every time - so a bridge of top slabs would
+	 * drop half a block per placement. Aiming above the middle keeps the surface level.
 	 */
 	private static final double UPPER_HALF_CLICK = 0.25;
 
 	/**
 	 * A placement waiting to happen.
 	 *
-	 * @param hit     the click this placement stands for: the face of an existing block, aimed
-	 *                where a hand would aim it
+	 * @param hit     the click this placement stands for: the face of an existing block
 	 * @param hand    the hand holding the block
-	 * @param blocked whether the server would refuse it anyway: something standing in the space,
-	 *                or a block that cannot survive there. Still worth drawing, in a colour that
-	 *                says so, because an outline that vanishes when a cow wanders in leaves the
-	 *                player wondering what they did.
+	 * @param blocked whether the server would refuse it: something standing in the space, or a
+	 *                block that cannot survive there. Still drawn, in a colour that says so,
+	 *                because an outline that vanishes when a cow wanders in leaves the player
+	 *                wondering what they did.
 	 */
 	public record Target(BlockHitResult hit, InteractionHand hand, boolean blocked) {
 		public BlockPos against() { return hit.getBlockPos(); }
@@ -87,12 +80,15 @@ public final class Reacharound {
 		}
 	}
 
+	/** What the click would do: land where promised, land there but be refused, or land elsewhere. */
+	private enum Outcome { LANDS, BLOCKED, ELSEWHERE }
+
 	/**
 	 * The reacharound placement available right now, or null if there is not one.
 	 *
-	 * <p>Cheap enough to call every frame: a few block lookups and a dry run of the placement, with
-	 * no world changed. Calling it per frame rather than caching a tick's answer is what keeps the
-	 * outline honest while the player is still turning.
+	 * <p>Called per frame rather than cached, which is what keeps the outline honest while the
+	 * player is still turning. Everything past the {@code MISS} gate only runs on frames where the
+	 * crosshair is already on open sky.
 	 */
 	public static Target find(Minecraft minecraft) {
 		CorsairConfig.Reacharound settings = CorsairConfig.get().reacharound;
@@ -102,16 +98,14 @@ public final class Reacharound {
 		ClientLevel level = minecraft.level;
 		if (player == null || level == null || minecraft.gameMode == null) return null;
 
-		// The whole premise: vanilla has nothing under the crosshair. A hit on a block or an entity
-		// is a placement or an interaction the player already asked for by name.
+		// The whole premise: vanilla has nothing under the crosshair.
 		if (minecraft.hitResult == null || minecraft.hitResult.getType() != HitResult.Type.MISS) return null;
 
-		// Mid-swing at a block, or already eating, drawing a bow, riding something. Checked here
-		// rather than at the click so that the outline disappears at the same moment the placement
-		// stops being available, instead of promising something the click would refuse.
+		// Mid-swing at a block, or already eating, drawing a bow, riding something. Checked here so
+		// the outline disappears at the same moment the placement stops being available.
 		if (minecraft.gameMode.isDestroying() || player.isHandsBusy()) return null;
 
-		InteractionHand hand = handHoldingABlock(player);
+		InteractionHand hand = handForPlacement(player);
 		if (hand == null) return null;
 
 		BlockPos reference = referenceBlock(player, settings);
@@ -126,16 +120,14 @@ public final class Reacharound {
 		if (!level.getBlockState(at).canBeReplaced()) return null;
 
 		BlockHitResult hit = hitFor(reference, facing, against);
-		return new Target(hit, hand, !wouldSucceed(player, level, hand, hit, at));
+		Outcome outcome = resolve(player, level, hand, hit, at);
+		if (outcome == Outcome.ELSEWHERE) return null;
+		return new Target(hit, hand, outcome == Outcome.BLOCKED);
 	}
 
 	/**
 	 * The block the placement extends: underfoot when looking along the ground, overhead when
 	 * looking up.
-	 *
-	 * <p>Both are one step off a block the player is already occupying space against, which is why
-	 * the destination can never land inside the player: it is a storey below their feet or a storey
-	 * above their head, and always one block horizontally away besides.
 	 */
 	private static BlockPos referenceBlock(LocalPlayer player, CorsairConfig.Reacharound settings) {
 		// Pitch runs positive downward, so "above the horizon" is the negative half.
@@ -145,8 +137,7 @@ public final class Reacharound {
 			return settings.vertical ? BlockPos.containing(player.getEyePosition()).above() : null;
 		}
 		// The block actually underfoot, which is not always the one a storey below the feet: stand
-		// on a bottom slab and your feet are half way up their own block, so stepping down from
-		// them lands on the empty space under the slab rather than on the slab holding you up.
+		// on a bottom slab and your feet are half way up their own block.
 		return settings.horizontal ? player.getOnPos() : null;
 	}
 
@@ -154,28 +145,53 @@ public final class Reacharound {
 	 * Whether this is a block with a face worth clicking.
 	 *
 	 * <p>Replaceable blocks are excluded because clicking one places <em>into</em> it rather than
-	 * beside it, which would put the block somewhere other than where the outline promised.
+	 * beside it.
 	 */
 	private static boolean canPlaceAgainst(BlockState state) {
 		return !state.isAir() && !state.canBeReplaced();
 	}
 
-	/** Main hand first, then off, which is the order vanilla tries them in. */
-	private static InteractionHand handHoldingABlock(LocalPlayer player) {
-		for (InteractionHand hand : InteractionHand.values()) {
-			if (player.getItemInHand(hand).getItem() instanceof BlockItem) return hand;
+	/**
+	 * The hand this placement comes from, or null if the click is not ours to take.
+	 *
+	 * <p>Vanilla tries the main hand and then the offhand, so an item in either that would have used
+	 * the click keeps it. The offhand only supplies a block when the main hand is empty, which is
+	 * the same condition the crosshair uses to decide it is holding a block - the two have to agree
+	 * or the shape and the placement part ways.
+	 */
+	private static InteractionHand handForPlacement(LocalPlayer player) {
+		ItemStack main = player.getMainHandItem();
+		ItemStack off = player.getOffhandItem();
+
+		if (main.getItem() instanceof BlockItem) {
+			return wouldUse(off) ? null : InteractionHand.MAIN_HAND;
+		}
+		if (main.isEmpty() && CorsairConfig.get().crosshair.holdingBlockInOffhand
+				&& off.getItem() instanceof BlockItem) {
+			return InteractionHand.OFF_HAND;
 		}
 		return null;
 	}
 
 	/**
+	 * An item vanilla would spend a click on even with nothing under the crosshair: food, a bow, a
+	 * pearl, anything with a use of its own. A block is not one, which is the whole point.
+	 */
+	public static boolean wouldUse(ItemStack stack) {
+		if (stack.isEmpty() || stack.getItem() instanceof BlockItem) return false;
+		return stack.has(DataComponents.CONSUMABLE)
+			|| stack.getItem() instanceof ProjectileItem
+			|| stack.getItem() instanceof ProjectileWeaponItem
+			|| stack.getUseAnimation() != ItemUseAnimation.NONE;
+	}
+
+	/**
 	 * The click this placement stands for.
 	 *
-	 * <p>Aimed at the centre of the face, derived from the two block positions rather than from a
-	 * direction vector - the arithmetic is the same and it cannot be broken by a renamed accessor.
-	 * The server checks that the hit location sits on the block it claims to be on, and a face
-	 * centre satisfies that with room to spare. On a side face of a block that lives in the top
-	 * half of its space, the click moves up to match.
+	 * <p>Aimed at the centre of the face, derived from the two block positions. The server checks
+	 * that the hit location sits on the block it claims to be on, and a face centre satisfies that
+	 * with room to spare. On a side face of a block that lives in the top half of its space, the
+	 * click moves up to match.
 	 */
 	private static BlockHitResult hitFor(BlockPos against, Direction face, BlockState againstState) {
 		Vec3 centre = Vec3.atCenterOf(against);
@@ -197,26 +213,31 @@ public final class Reacharound {
 	}
 
 	/**
-	 * The two checks the server's placement code runs after everything else has passed: the block
-	 * has to be able to stand where it lands, and nothing can be standing there already.
+	 * What this click would actually do, asked of the context the click will actually build.
 	 *
-	 * <p>Asked of the same state the click will produce, from the same context, so a torch with no
-	 * wall or a cow in the way is known before the click rather than after it.
+	 * <p>The context decides for itself which position a click resolves to, and it is not always the
+	 * neighbour the outline promised: scaffolding treats the block clicked as replaceable and then
+	 * walks the placement up, so a click meant to extend a bridge lands over the player's head.
+	 * A placement that would go somewhere else is not this placement, and is refused outright
+	 * rather than drawn in the wrong place.
 	 */
-	private static boolean wouldSucceed(LocalPlayer player, ClientLevel level, InteractionHand hand,
-			BlockHitResult hit, BlockPos at) {
+	private static Outcome resolve(LocalPlayer player, ClientLevel level, InteractionHand hand,
+			BlockHitResult hit, BlockPos promised) {
 		ItemStack stack = player.getItemInHand(hand);
 		BlockPlaceContext context = new BlockPlaceContext(player, hand, stack, hit);
+		if (!context.canPlace() || !context.getClickedPos().equals(promised)) return Outcome.ELSEWHERE;
+
 		BlockState placed = ((BlockItem) stack.getItem()).getBlock().getStateForPlacement(context);
-		return placed != null
-			&& placed.canSurvive(level, at)
-			&& level.isUnobstructed(placed, at, CollisionContext.placementContext(player));
+		if (placed == null) return Outcome.BLOCKED;
+		boolean lands = placed.canSurvive(level, promised)
+			&& level.isUnobstructed(placed, promised, CollisionContext.of(player));
+		return lands ? Outcome.LANDS : Outcome.BLOCKED;
 	}
 
 	/**
 	 * Send the placement.
 	 *
-	 * @return whether it was taken, so the caller knows whether vanilla still needs its turn
+	 * @return whether this click is spent, so the caller knows whether vanilla still needs its turn
 	 */
 	public static boolean place(Minecraft minecraft, Target target) {
 		LocalPlayer player = minecraft.player;
@@ -229,15 +250,18 @@ public final class Reacharound {
 		int count = stack.getCount();
 
 		InteractionResult result = minecraft.gameMode.useItemOn(player, target.hand(), target.hit());
-		if (!(result instanceof InteractionResult.Success success)) return false;
 
-		if (success.swingSource() == InteractionResult.SwingSource.PREDICTED) {
-			player.swing(target.hand(), animation, true);
-		}
-		// The hand's own bob on a placement, on the same terms vanilla grants it: something left
-		// the stack, or nothing ever leaves it.
-		if (!stack.isEmpty() && (stack.getCount() != count || player.hasInfiniteMaterials())) {
-			player.itemUsed(target.hand());
+		// The packet goes out before the result is inspected, so from here the click is spent
+		// whatever the server makes of it. Reporting failure would let vanilla send two more.
+		if (result instanceof InteractionResult.Success success) {
+			if (success.swingSource() == InteractionResult.SwingSource.PREDICTED) {
+				player.swing(target.hand(), animation, true);
+			}
+			// The hand's own bob, on the same terms vanilla grants it: something left the stack, or
+			// nothing ever leaves it.
+			if (!stack.isEmpty() && (stack.getCount() != count || player.hasInfiniteMaterials())) {
+				player.itemUsed(target.hand());
+			}
 		}
 		return true;
 	}

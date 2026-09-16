@@ -51,10 +51,11 @@ import net.minecraft.world.phys.shapes.CollisionContext;
  * do to the other.
  *
  * <p>Worked out from the client's own picture of the world, which is all a crosshair has. Vanilla
- * keeps its interaction rules in the blocks and items themselves, behind methods a client cannot
- * ask without acting, so the questions here are answered by kind: a door is a thing you use, a
- * villager is a thing you talk to, a block with a menu opens. Wrong at the edges, right where
- * anyone looks.
+ * keeps its interaction rules behind methods a client cannot ask without acting, so the questions
+ * here are answered by kind: a door is a thing you use, a villager is a thing you talk to, a block
+ * with a menu opens. Wrong at the edges, right where anyone looks.
+ *
+ * <p>The branches are a priority list, first match wins, most specific first.
  */
 public final class CrosshairContext {
 	private CrosshairContext() {}
@@ -63,7 +64,6 @@ public final class CrosshairContext {
 		HIDDEN, REGULAR, ON_BLOCK, ON_INTERACTABLE_BLOCK, ON_ENTITY,
 		HOLDING_TOOL, HOLDING_MELEE_WEAPON, HOLDING_RANGED_WEAPON, HOLDING_THROWABLE,
 		HOLDING_SHIELD, HOLDING_BLOCK, HOLDING_USABLE_ITEM,
-		/** A block in hand, nothing under the crosshair, and the reacharound has somewhere to put it. */
 		REACHAROUND_FLOOR, REACHAROUND_CEILING
 	}
 
@@ -93,68 +93,80 @@ public final class CrosshairContext {
 
 		ItemStack main = player.getMainHandItem();
 		ItemStack off = player.getOffhandItem();
+		boolean targeting = target != Target.NONE;
 		boolean blockInteractable = block != null && interactable(block, level, at);
 		boolean entityInteractable = entity != null && interactable(entity, main);
 		boolean entityAttackable = entity != null && entity.isAttackable();
+		boolean brackets = config.usableBrackets;
 
-		// The hand first: what you are holding says what you mean to do, and the crosshair is a
-		// promise about the click. Each item kind has its own idea of when it is in play.
-		if (config.holdingShield && (blocks(main) || blocks(off))) {
+		// The hand first: what you are holding says what you mean to do. A shield only counts when
+		// it is the item a click would actually raise, so sword-and-board still reads as the sword.
+		if (config.holdingShield && (blocks(main) || (main.isEmpty() && blocks(off)))) {
 			return new Reading(State.HOLDING_SHIELD, false, false);
 		}
-		if (main.getItem() instanceof ProjectileWeaponItem
-				&& shows(config.holdingRangedWeapon, target != Target.NONE, entityAttackable)) {
+		if (main.getItem() instanceof ProjectileWeaponItem && Policy.named(config.holdingRangedWeapon)
+				.shows(new Policy.Facts(targeting, entityAttackable))) {
 			return new Reading(State.HOLDING_RANGED_WEAPON, false, false);
 		}
-		if (main.getItem() instanceof ProjectileItem
-				&& shows(config.holdingThrowable, target != Target.NONE, entityAttackable || target == Target.BLOCK)) {
+		if (main.getItem() instanceof ProjectileItem && Policy.named(config.holdingThrowable)
+				.shows(new Policy.Facts(targeting, entityAttackable || target == Target.BLOCK))) {
 			return new Reading(State.HOLDING_THROWABLE, false, false);
 		}
+
 		ItemStack held = main;
 		if (main.isEmpty() && config.holdingBlockInOffhand && off.getItem() instanceof BlockItem) held = off;
-		if (held.getItem() instanceof BlockItem && !"never".equals(config.holdingBlock)) {
-			if (target == Target.NONE) {
-				// The click would bridge. Its own state, because a square where nothing is says
-				// "a block goes here" and the point of the reacharound is that it goes somewhere
-				// you are not looking: at your feet, or over your head.
-				Reacharound.Target reach = Reacharound.find(mc);
-				if (reach != null) {
-					// The face is always the way you face; which storey the block lands on is
-					// what tells a bridge from a ceiling.
-					return new Reading(reach.placeAt().getY() > player.getBlockY()
-						? State.REACHAROUND_CEILING : State.REACHAROUND_FLOOR, false, false);
+		if (held.getItem() instanceof BlockItem) {
+			Policy policy = Policy.named(config.holdingBlock);
+			if (policy != Policy.NEVER) {
+				if (target == Target.NONE) {
+					// The click would bridge. Its own state, because a square where nothing is says
+					// "a block goes here" and the point of the reacharound is that it goes somewhere
+					// you are not looking: at your feet, or over your head.
+					Reacharound.Target reach = Reacharound.find(mc);
+					if (reach != null) {
+						return new Reading(reach.placeAt().getY() > player.getBlockY()
+							? State.REACHAROUND_CEILING : State.REACHAROUND_FLOOR, false, false);
+					}
+				}
+				boolean placeable = target == Target.BLOCK && placeable(player, level, held,
+					held == main ? InteractionHand.MAIN_HAND : InteractionHand.OFF_HAND, (BlockHitResult) hit);
+				if (policy.shows(new Policy.Facts(target == Target.BLOCK, placeable))) {
+					return new Reading(State.HOLDING_BLOCK, false, blockInteractable && brackets);
 				}
 			}
-			boolean placeable = target == Target.BLOCK
-				&& placeable(player, level, held, held == main ? InteractionHand.MAIN_HAND : InteractionHand.OFF_HAND, (BlockHitResult) hit);
-			if (shows(config.holdingBlock, target == Target.BLOCK, placeable)) {
-				return new Reading(State.HOLDING_BLOCK, false, blockInteractable && config.usableBrackets);
-			}
 		}
-		if (main.has(DataComponents.TOOL) && !main.has(DataComponents.WEAPON)
-				&& shows(config.holdingTool, target == Target.BLOCK, target == Target.BLOCK)) {
-			boolean correct = config.correctToolDot && block != null && main.isCorrectToolForDrops(block);
-			return new Reading(State.HOLDING_TOOL, correct, blockInteractable && config.usableBrackets);
+
+		if (main.has(DataComponents.TOOL) && !main.has(DataComponents.WEAPON)) {
+			boolean correct = block != null && main.isCorrectToolForDrops(block);
+			// "Would work" for a tool means it is the right tool for the block, not merely that a
+			// block is there - otherwise this policy would have two words for one behaviour.
+			if (Policy.named(config.holdingTool).shows(new Policy.Facts(target == Target.BLOCK, correct))) {
+				return new Reading(State.HOLDING_TOOL, config.correctToolDot && correct,
+					blockInteractable && brackets);
+			}
 		}
 		if (config.holdingMeleeWeapon && main.has(DataComponents.WEAPON)
 				&& (!config.meleeOnlyOnEntity || entityAttackable)) {
 			// An axe is a weapon that is also a tool; on a block it is the tool that matters.
 			boolean correct = config.correctToolDot && block != null && main.has(DataComponents.TOOL)
 				&& main.isCorrectToolForDrops(block);
-			return new Reading(State.HOLDING_MELEE_WEAPON, correct, blockInteractable && config.usableBrackets);
+			return new Reading(State.HOLDING_MELEE_WEAPON, correct, blockInteractable && brackets);
 		}
-		if (usable(main) && shows(config.holdingUsableItem, target != Target.NONE,
-				main.has(DataComponents.CONSUMABLE) || target != Target.NONE)) {
-			return new Reading(State.HOLDING_USABLE_ITEM, false, config.usableBrackets);
+		if (usable(main)) {
+			// Narrower than targeting, never wider: the item has to have something to act on.
+			boolean acts = main.has(DataComponents.CONSUMABLE) || blockInteractable || entityInteractable;
+			if (Policy.named(config.holdingUsableItem).shows(new Policy.Facts(targeting, acts))) {
+				return new Reading(State.HOLDING_USABLE_ITEM, false, acts && brackets);
+			}
 		}
 
 		// Then the target on its own terms.
 		if (target == Target.ENTITY && config.onEntity && (entityAttackable || entityInteractable)) {
-			return new Reading(State.ON_ENTITY, false, entityInteractable && config.usableBrackets);
+			return new Reading(State.ON_ENTITY, false, entityInteractable && brackets);
 		}
 		if (target == Target.BLOCK) {
 			if (blockInteractable && config.onInteractableBlock) {
-				return new Reading(State.ON_INTERACTABLE_BLOCK, false, config.usableBrackets);
+				return new Reading(State.ON_INTERACTABLE_BLOCK, false, brackets);
 			}
 			if (config.onBlock) return new Reading(State.ON_BLOCK, false, false);
 		}
@@ -162,21 +174,17 @@ public final class CrosshairContext {
 		return new Reading(config.hideWhenIdle ? State.HIDDEN : State.REGULAR, false, false);
 	}
 
-	/** A policy word against the two facts it can turn on. */
-	private static boolean shows(String policy, boolean targeting, boolean interactable) {
-		return switch (policy == null ? "always" : policy.trim().toLowerCase(java.util.Locale.ROOT)) {
-			case "never" -> false;
-			case "targeting" -> targeting;
-			case "interactable" -> interactable;
-			default -> true;
-		};
-	}
-
+	/** A shield, or anything else that answers a click by guarding. */
 	private static boolean blocks(ItemStack stack) {
 		return stack.has(DataComponents.BLOCKS_ATTACKS);
 	}
 
-	/** Something a right-click would do with this item on its own, or on what is there. */
+	/**
+	 * Something a right-click would do with this item on its own, or on what is there.
+	 *
+	 * <p>Narrower than {@link Reacharound#wouldUse}, which asks whether vanilla would spend the
+	 * click: projectiles are missing here because the branches above already claimed them.
+	 */
 	private static boolean usable(ItemStack stack) {
 		if (stack.isEmpty() || stack.getItem() instanceof BlockItem) return false;
 		if (stack.has(DataComponents.CONSUMABLE)) return true;

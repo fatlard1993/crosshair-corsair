@@ -1,6 +1,7 @@
 package justfatlard.crosshair_corsair.render;
 
 import justfatlard.crosshair_corsair.CorsairConfig;
+import justfatlard.crosshair_corsair.CorsairConfig.BreakAnimation;
 import justfatlard.crosshair_corsair.reach.Reacharound;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderContext;
@@ -39,15 +40,16 @@ public final class BlockOutlines {
 		if (!config.selectionBox.enabled) return false;
 
 		// High contrast is an accessibility setting, and somebody who turned it on asked for a
-		// specific, legible outline by name. A cosmetic preference does not get to overrule that,
-		// so vanilla keeps the whole job whenever it is on.
+		// specific, legible outline by name. A cosmetic preference does not get to overrule that.
 		if (outline.highContrast()) return true;
 
 		if (!config.stylesSelectionBox()) return true;
 
+		Breaking breaking = breaking(outline.pos(), config);
 		int argb = blink(config.outlineArgb(), config.selectionBox);
-		Breaking breaking = breaking(outline.pos(), config.selectionBox);
-		if (breaking.mode == Breaking.Mode.ALPHA) argb = withAlpha(argb, (int) ((argb >>> 24) * (1 - breaking.progress)));
+		if (breaking.mode() == BreakAnimation.ALPHA) {
+			argb = withAlpha(argb, (int) ((argb >>> 24) * (1 - breaking.progress())));
+		}
 		draw(context, outline.shape(), outline.pos(), argb, outline.isTranslucent(), breaking);
 		return false;
 	}
@@ -64,25 +66,17 @@ public final class BlockOutlines {
 		return (Math.clamp(alpha, 0, 255) << 24) | (argb & 0xFFFFFF);
 	}
 
-	/** What the box does to itself as the block under it is mined. */
-	private record Breaking(Mode mode, float progress) {
-		enum Mode { NONE, SHRINK, DOWN, ALPHA }
-		static final Breaking NONE = new Breaking(Mode.NONE, 0F);
+	private record Breaking(BreakAnimation mode, float progress) {
+		static final Breaking NONE = new Breaking(BreakAnimation.NONE, 0F);
 	}
 
-	private static Breaking breaking(BlockPos pos, CorsairConfig.SelectionBox box) {
-		Breaking.Mode mode = switch (box.breakAnimation == null ? "none" : box.breakAnimation.trim().toLowerCase(java.util.Locale.ROOT)) {
-			case "shrink" -> Breaking.Mode.SHRINK;
-			case "down" -> Breaking.Mode.DOWN;
-			case "alpha" -> Breaking.Mode.ALPHA;
-			default -> Breaking.Mode.NONE;
-		};
-		if (mode == Breaking.Mode.NONE) return Breaking.NONE;
+	private static Breaking breaking(BlockPos pos, CorsairConfig config) {
+		if (config.breakAnimation() == BreakAnimation.NONE) return Breaking.NONE;
 		var gameMode = Minecraft.getInstance().gameMode;
 		if (gameMode == null || !gameMode.isDestroying()) return Breaking.NONE;
 		var digging = (justfatlard.crosshair_corsair.mixin.GameModeDestroyAccessor) gameMode;
 		if (!pos.equals(digging.corsair$destroyBlockPos())) return Breaking.NONE;
-		return new Breaking(mode, Math.clamp(digging.corsair$destroyProgress(), 0F, 1F));
+		return new Breaking(config.breakAnimation(), Math.clamp(digging.corsair$destroyProgress(), 0F, 1F));
 	}
 
 	private static void drawReacharoundGhost(LevelRenderContext context, CorsairConfig config) {
@@ -104,14 +98,14 @@ public final class BlockOutlines {
 
 		pose.pushPose();
 		pose.translate(pos.getX() - camera.x, pos.getY() - camera.y, pos.getZ() - camera.z);
-		// The break animations are transforms on the pose rather than on the shape, so a stair
-		// or a fence shrinks as the shape it is and not as its bounding box.
-		if (breaking.mode() == Breaking.Mode.SHRINK) {
+		// The break animations are transforms on the pose rather than on the shape, so a stair or a
+		// fence shrinks as the shape it is and not as its bounding box.
+		if (breaking.mode() == BreakAnimation.SHRINK) {
 			float scale = 1F - breaking.progress();
 			pose.translate(0.5, 0.5, 0.5);
 			pose.scale(scale, scale, scale);
 			pose.translate(-0.5, -0.5, -0.5);
-		} else if (breaking.mode() == Breaking.Mode.DOWN) {
+		} else if (breaking.mode() == BreakAnimation.DOWN) {
 			pose.scale(1F, 1F - breaking.progress(), 1F);
 		}
 		context.submitNodeCollector()
@@ -126,13 +120,7 @@ public final class BlockOutlines {
 			: RenderTypes.linesTranslucent();
 	}
 
-	/**
-	 * Configured thickness, or the game's own if none was asked for.
-	 *
-	 * <p>Vanilla's is not a constant: it scales with the window so that an outline keeps the same
-	 * apparent weight whatever the resolution. Naming a number in the config opts out of that,
-	 * which is the point of being able to name one.
-	 */
+	/** Configured thickness, or the game's own if none was asked for. */
 	private static float lineWidth(LevelRenderContext context) {
 		float configured = CorsairConfig.get().selectionBox.lineWidth;
 		if (configured > 0.0F) return configured;

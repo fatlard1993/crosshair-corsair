@@ -35,8 +35,10 @@ public final class ToggleKey {
 	}
 
 	private static void tick(Minecraft minecraft) {
+		// Any number of presses inside one tick is one flip. Pairing them off would make a hurried
+		// double tap do nothing at all, silently, which is the exact moment this key is for.
 		boolean pressed = false;
-		while (KEY.consumeClick()) pressed = !pressed;
+		while (KEY.consumeClick()) pressed = true;
 		if (!pressed) return;
 
 		CorsairConfig.Reacharound settings = CorsairConfig.get().reacharound;
