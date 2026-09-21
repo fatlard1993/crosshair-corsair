@@ -1,0 +1,18 @@
+{
+	"schemaVersion": 1,
+	"id": "crosshair-corsair-gametest",
+	"version": "1.0.0",
+	"name": "Crosshair Corsair smoke test",
+	"description": "Loads the mod, joins a world, and fails if anything on the way threw.",
+	"license": "MIT",
+	"environment": "*",
+	"entrypoints": {
+		"fabric-client-gametest": [
+			"justfatlard.crosshair_corsair.gametest.SmokeTest"
+		]
+	},
+	"depends": {
+		"crosshair-corsair-justfatlard": "*",
+		"fabric-client-gametest-api-v1": "*"
+	}
+}

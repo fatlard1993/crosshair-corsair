@@ -1,0 +1,16 @@
+{
+  "overview": [
+    "Opinionated tweaks to the crosshair, to whatever it is pointing at, and to what happens when it is pointing at nothing.",
+    "Client-side only. Nothing needs to be installed on the server."
+  ],
+  "versions": {
+    "1.0.1": [
+      "The reacharound stops competing for clicks: a block in one hand no longer jumps the queue ahead of a bow, food or a pearl in the other, and where the block would land somewhere other than the outline says, there is no reacharound at all.",
+      "A shield only takes the crosshair when a click would actually raise it, F3's crosshair stands this one down, and the config rewrites itself whenever it is missing a key, so a new setting is never hidden."
+    ],
+    "1.0.0": [
+      "Reacharound placement: stand at an edge with blocks in hand, look ahead, and the next block goes out in front of you, with an outline showing where it will land before you click. No more looking down to bridge.",
+      "Plus a styleable selection box and a set of crosshairs to pick from."
+    ]
+  }
+}
