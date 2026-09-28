@@ -62,9 +62,13 @@ public final class CorsairConfig {
 		public String holdingTool = "always";
 		/** A dot in the middle when the tool in hand is the right one for the block it is on. */
 		public boolean correctToolDot = true;
-		public boolean holdingMeleeWeapon = true;
-		/** Only show the melee style when there is something to hit. */
-		public boolean meleeOnlyOnEntity = false;
+		public String holdingMeleeWeapon = "always";
+		/**
+		 * Read only to carry a file from before the weapon took a policy word, when this and a
+		 * true/false {@link #holdingMeleeWeapon} said the same thing. Null afterwards, which Gson
+		 * leaves out of the file.
+		 */
+		public Boolean meleeOnlyOnEntity = null;
 		public String holdingRangedWeapon = "always";
 		public String holdingThrowable = "interactable";
 		public boolean holdingShield = true;
@@ -82,6 +86,16 @@ public final class CorsairConfig {
 
 		public Styles styles = new Styles();
 
+		/** Gson reads the old true/false into the word as "true" or "false". */
+		void carryOldMeleeSetting() {
+			if ("false".equals(holdingMeleeWeapon)) {
+				holdingMeleeWeapon = "never";
+			} else if ("true".equals(holdingMeleeWeapon)) {
+				holdingMeleeWeapon = Boolean.TRUE.equals(meleeOnlyOnEntity) ? "interactable" : "always";
+			}
+			meleeOnlyOnEntity = null;
+		}
+
 		public static final class Styles {
 			public String regular = "cross";
 			public String onBlock = "cross";
@@ -89,7 +103,7 @@ public final class CorsairConfig {
 			public String onEntity = "cross_open";
 			public String holdingTool = "cross";
 			public String holdingMeleeWeapon = "cross";
-			public String holdingRangedWeapon = "circle";
+			public String holdingRangedWeapon = "scope";
 			public String holdingThrowable = "circle_large";
 			public String holdingShield = "brackets";
 			public String holdingBlock = "square";
@@ -248,6 +262,7 @@ public final class CorsairConfig {
 			if (loaded.reacharound == null) loaded.reacharound = new Reacharound();
 			if (loaded.crosshair == null) loaded.crosshair = new Crosshair();
 			if (loaded.crosshair.styles == null) loaded.crosshair.styles = new Crosshair.Styles();
+			loaded.crosshair.carryOldMeleeSetting();
 
 			loaded.derive();
 			current = loaded;

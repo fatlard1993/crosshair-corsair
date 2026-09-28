@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Draw the crosshair shapes: seventeen fifteen-by-fifteen sprites, white on nothing.
+"""Draw the crosshair shapes: eighteen fifteen-by-fifteen sprites, white on nothing.
 
 White, because colour is the config's business: the game tints a sprite as it draws it, and a
 white sprite takes any tint exactly. Fifteen wide because vanilla's crosshair is, and every
 shape here has to sit in the same frame it does so swapping between them moves nothing.
 
-Seventeen and not eighteen: CrosshairStyle.CROSS points at vanilla's own sprite, so drawing one
+Eighteen and not nineteen: CrosshairStyle.CROSS points at vanilla's own sprite, so drawing one
 here would ship a file nothing can load. This script checks itself against that enum and fails
 if the two ever disagree, and writes a contact sheet so the shapes can be looked at rather than
 only counted.
@@ -33,8 +33,11 @@ C = 7  # the centre pixel
 WHITE = (255, 255, 255, 255)
 
 
-def blank():
-    image = Image.new("RGBA", (SIZE, SIZE), (0, 0, 0, 0))
+def blank(height=None):
+    """A frame SIZE wide. Taller where a shape needs room under the centre; the centre pixel
+    stays at C either way, so the draw code centres every shape the same and the extra rows
+    hang below."""
+    image = Image.new("RGBA", (SIZE, height or SIZE), (0, 0, 0, 0))
     return image, ImageDraw.Draw(image)
 
 
@@ -82,6 +85,27 @@ def caret():
     image, draw = blank()
     line(draw, (C, C - 3), (C - 4, C + 1))
     line(draw, (C, C - 3), (C + 4, C + 1))
+    return image
+
+
+# Taller than the rest: a ranging reticle wants its marks far enough apart to tell apart, and
+# fifteen rows leaves seven under the centre.
+SCOPE_HEIGHT = 23
+SCOPE_MARKS = ((5, 3), (10, 4), (15, 5))
+
+
+def scope():
+    image, draw = blank(SCOPE_HEIGHT)
+    line(draw, (C - 6, C), (C - 2, C))
+    line(draw, (C + 2, C), (C + 6, C))
+    line(draw, (C, C - 4), (C, C - 2))
+    draw.point((C, C), fill=WHITE)
+    line(draw, (C, C + 2), (C, C + SCOPE_MARKS[-1][0]))
+    # Each mark two pixels wider than the stem at its narrowest: one pixel a side reads as
+    # noise at gui scale, not as a mark.
+    for drop, reach in SCOPE_MARKS:
+        line(draw, (C - reach, C + drop), (C - 2, C + drop))
+        line(draw, (C + 2, C + drop), (C + reach, C + drop))
     return image
 
 
@@ -138,6 +162,7 @@ SHAPES = {
     "diamond": diamond(4),
     "diamond_large": diamond(6),
     "caret": caret(),
+    "scope": scope(),
     "dot": dot(),
     "brackets": brackets(),
     "brackets_top": brackets(bottom=False),
@@ -175,21 +200,24 @@ def contact_sheet(scale=9, columns=5, pad=8, label_height=12):
     """One image of every shape, big enough to look at."""
     names = sorted(SHAPES)
     cell = SIZE * scale
+    tallest = max(shape.size[1] for shape in SHAPES.values()) * scale
     rows = (len(names) + columns - 1) // columns
     width = columns * (cell + pad) + pad
-    height = rows * (cell + pad + label_height) + pad
+    height = rows * (tallest + pad + label_height) + pad
     sheet = Image.new("RGBA", (width, height), (32, 32, 40, 255))
     draw = ImageDraw.Draw(sheet)
     for index, name in enumerate(names):
         column, row = index % columns, index // columns
         x = pad + column * (cell + pad)
-        y = pad + row * (cell + pad + label_height)
-        draw.rectangle([x - 1, y - 1, x + cell, y + cell], outline=(70, 70, 82, 255))
-        shape = SHAPES[name].resize((cell, cell), Image.NEAREST)
+        y = pad + row * (tallest + pad + label_height)
+        # Each cell is the tallest shape's box, so a taller sprite is not squashed into a square.
+        box = SHAPES[name].size[1] * scale
+        draw.rectangle([x - 1, y - 1, x + cell, y + box], outline=(70, 70, 82, 255))
+        shape = SHAPES[name].resize((cell, box), Image.NEAREST)
         # As its own mask, or the transparent ground is copied over the sheet and every cell
         # comes out a solid block - which is what the sprite is not.
         sheet.paste(shape, (x, y), shape)
-        draw.text((x, y + cell + 2), name, fill=(190, 190, 200, 255))
+        draw.text((x, y + tallest + 2), name, fill=(190, 190, 200, 255))
     return sheet
 
 

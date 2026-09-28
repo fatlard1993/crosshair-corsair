@@ -35,10 +35,10 @@ this one, not just `src/main`.
 
 ## The sprites
 
-`generate_crosshairs.py` draws the seventeen shapes into
+`generate_crosshairs.py` draws the eighteen shapes into
 `src/client/resources/assets/.../textures/gui/sprites/crosshair/`. Run it after changing one.
 
-It draws seventeen and not eighteen because `CrosshairStyle.CROSS` points at vanilla's own sprite,
+It draws eighteen and not nineteen because `CrosshairStyle.CROSS` points at vanilla's own sprite,
 so a cross drawn here would ship a file nothing can load. The script checks itself against that
 enum and fails if the two drift apart in either direction, and writes
 `build/crosshair-contact-sheet.png` so the shapes can be looked at rather than only counted.
@@ -55,6 +55,6 @@ against exact target names (`Minecraft.startUseItem`, `MultiPlayerGameMode.destr
 launch rather than a quiet degrade. Only starting the game surfaces that.
 
 `./gradlew runClient` in a window that is not minimized. Reaching the title screen already proves
-every mixin target, the version predicate, and that all seventeen sprites load. The rest wants a
+every mixin target, the version predicate, and that all eighteen sprites load. The rest wants a
 world: hold a block at the edge of a drop, look ahead, and check the ghost lands where the block
 does.

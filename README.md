@@ -41,13 +41,18 @@ gone; look at a block and it is back; look at something you could use - a door, 
 villager, a cow with wheat in your hand - and round brackets close around it; hold the right
 tool for the block you are looking at and a dot sits in the middle.
 
-What you hold changes its shape. A bow or crossbow draws a circle, a snowball a larger one, a
+What you hold changes its shape. A bow or crossbow draws a scope, a snowball a large circle, a
 shield brackets, a block a square, and each of those only when it means something: a block shows
 its square where it would actually go, a snowball its circle only with something to throw at.
 When the click would be a reacharound, the crosshair says so instead: a line under it for a block
 going at your feet, a caret for one going over your head.
-Every state has its own shape and every shape can be changed: eighteen to choose from, and
+Every state has its own shape and every shape can be changed: nineteen to choose from, and
 `cross` is vanilla's own so the default look is exactly vanilla's.
+
+The bow's `scope` is a rifle scope's drop ladder, with three marks under the centre to hold on a
+target further off, each wider than the last so a mob's width against them says roughly
+how far away it is. The marks are steps, not distances: how many blocks one is worth moves with
+your FOV and GUI scale.
 
 A shield only takes the crosshair when it is the item a click would actually raise - in your main
 hand, or in your off hand with the main one empty - so sword-and-board still reads as the sword.
@@ -114,8 +119,7 @@ you tune a colour.
     "onEntity": true,
     "holdingTool": "always",
     "correctToolDot": true,
-    "holdingMeleeWeapon": true,
-    "meleeOnlyOnEntity": false,
+    "holdingMeleeWeapon": "always",
     "holdingRangedWeapon": "always",
     "holdingThrowable": "interactable",
     "holdingShield": true,
@@ -133,7 +137,7 @@ you tune a colour.
       "onEntity": "cross_open",
       "holdingTool": "cross",
       "holdingMeleeWeapon": "cross",
-      "holdingRangedWeapon": "circle",
+      "holdingRangedWeapon": "scope",
       "holdingThrowable": "circle_large",
       "holdingShield": "brackets",
       "holdingBlock": "square",
@@ -150,7 +154,7 @@ The held-item policies are words, and every one of them takes all four: `always`
 `never`. `interactable` is always the narrower of the middle two - for a tool it means the right
 tool for that block, not merely that a block is there. Styles
 are `cross`, `cross_open`, `cross_open_diagonal`, `cross_diagonal_small`, `circle`,
-`circle_large`, `square`, `square_large`, `diamond`, `diamond_large`, `caret`, `dot`,
+`circle_large`, `square`, `square_large`, `diamond`, `diamond_large`, `caret`, `scope`, `dot`,
 `brackets`, `brackets_top`, `brackets_bottom`, `brackets_round`, `lines`, `line_bottom`. With
 `blend` on the crosshair inverts what is behind it, as vanilla's does; `overrideColor` paints it
 `color` instead.

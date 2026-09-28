@@ -59,9 +59,9 @@ public final class CrosshairElement implements HudElement {
 
 		if (crosshair) {
 			RenderPipeline pipeline = config.blend ? RenderPipelines.CROSSHAIR : RenderPipelines.GUI_TEXTURED;
-			draw(graphics, pipeline, styleFor(reading.state(), config.styles).sprite, x, y, config);
-			if (reading.usable()) draw(graphics, pipeline, CrosshairStyle.BRACKETS_ROUND.sprite, x, y, config);
-			if (reading.correctTool()) draw(graphics, pipeline, CrosshairStyle.DOT.sprite, x, y, config);
+			draw(graphics, pipeline, styleFor(reading.state(), config.styles), x, y, config);
+			if (reading.usable()) draw(graphics, pipeline, CrosshairStyle.BRACKETS_ROUND, x, y, config);
+			if (reading.correctTool()) draw(graphics, pipeline, CrosshairStyle.DOT, x, y, config);
 		}
 		// The indicator is about the weapon's cooldown rather than about what is under the
 		// crosshair, so hiding the crosshair does not take it with it. It keeps vanilla's pipeline
@@ -69,12 +69,17 @@ public final class CrosshairElement implements HudElement {
 		if (indicator) attackIndicator(mc, graphics);
 	}
 
-	private static void draw(GuiGraphicsExtractor graphics, RenderPipeline pipeline, Identifier sprite,
+	/**
+	 * A shape is drawn at its own height, which is SIZE for all but the scope. x and y put the
+	 * centre pixel on the screen's centre, and that pixel is at the same index in every shape, so
+	 * a taller one simply reaches further down without moving anything.
+	 */
+	private static void draw(GuiGraphicsExtractor graphics, RenderPipeline pipeline, CrosshairStyle style,
 			int x, int y, CorsairConfig.Crosshair config) {
 		if (config.overrideColor) {
-			graphics.blitSprite(pipeline, sprite, x, y, SIZE, SIZE, CorsairConfig.get().crosshairArgb());
+			graphics.blitSprite(pipeline, style.sprite, x, y, SIZE, style.height, CorsairConfig.get().crosshairArgb());
 		} else {
-			graphics.blitSprite(pipeline, sprite, x, y, SIZE, SIZE);
+			graphics.blitSprite(pipeline, style.sprite, x, y, SIZE, style.height);
 		}
 	}
 

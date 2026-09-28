@@ -22,6 +22,13 @@ public enum CrosshairStyle {
 	DIAMOND,
 	DIAMOND_LARGE,
 	CARET,
+	/**
+	 * Twenty-three tall, not fifteen. A ranging reticle needs its marks far enough apart to tell
+	 * apart, and fifteen rows leave seven under the centre. The extra rows hang below: the centre
+	 * pixel is at the same index whatever the height, so one centring sum still serves every
+	 * shape. Kept in step with SCOPE_HEIGHT in generate_crosshairs.py.
+	 */
+	SCOPE(23),
 	DOT,
 	BRACKETS,
 	BRACKETS_TOP,
@@ -30,14 +37,34 @@ public enum CrosshairStyle {
 	LINES,
 	LINE_BOTTOM;
 
+	/** Every shape is fifteen wide; most are fifteen tall. */
+	public static final int WIDTH = 15;
 	public final Identifier sprite;
+	public final int height;
 
 	CrosshairStyle() {
+		this(WIDTH);
+	}
+
+	CrosshairStyle(int height) {
 		this.sprite = Identifier.fromNamespaceAndPath(Main.MOD_ID, "crosshair/" + configName());
+		this.height = height;
 	}
 
 	CrosshairStyle(Identifier sprite) {
 		this.sprite = sprite;
+		this.height = WIDTH;
+	}
+
+	/**
+	 * The shape's own texture, for drawing it somewhere that is not the hud.
+	 *
+	 * <p>A sprite id and a texture path are not the same string: the hud draws these off the gui
+	 * atlas, and a menu wanting to show one needs the file. Built from the sprite so the two
+	 * cannot drift; CROSS points at vanilla's, which lives under its own namespace.
+	 */
+	public String texture() {
+		return sprite.getNamespace() + ":textures/gui/sprites/" + sprite.getPath() + ".png";
 	}
 
 	/** The name this style goes by in the config file. */

@@ -4,6 +4,10 @@
     "Client-side only. Nothing needs to be installed on the server."
   ],
   "versions": {
+    "1.1.0": [
+      "Every shape setting shows the shape beside its name in the mods menu.",
+      "The scope reticle's drop marks sit lower and further apart."
+    ],
     "1.0.1": [
       "A block in one hand no longer jumps the queue ahead of a bow, food or a pearl in the other.",
       "Where the block would land somewhere other than the outline says, there is no reacharound.",

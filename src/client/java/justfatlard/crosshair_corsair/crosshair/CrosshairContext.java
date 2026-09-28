@@ -145,8 +145,8 @@ public final class CrosshairContext {
 					blockInteractable && brackets);
 			}
 		}
-		if (config.holdingMeleeWeapon && main.has(DataComponents.WEAPON)
-				&& (!config.meleeOnlyOnEntity || entityAttackable)) {
+		if (main.has(DataComponents.WEAPON) && Policy.named(config.holdingMeleeWeapon)
+				.shows(new Policy.Facts(targeting, entityAttackable))) {
 			// An axe is a weapon that is also a tool; on a block it is the tool that matters.
 			boolean correct = config.correctToolDot && block != null && main.has(DataComponents.TOOL)
 				&& main.isCorrectToolForDrops(block);
