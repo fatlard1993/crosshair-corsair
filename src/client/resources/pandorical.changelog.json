@@ -4,6 +4,9 @@
     "Client-side only. Nothing needs to be installed on the server."
   ],
   "versions": {
+    "1.1.1": [
+      "Release notes rewritten to read plainly; nothing in play changes."
+    ],
     "1.1.0": [
       "Every shape setting shows the shape beside its name in the mods menu.",
       "The scope reticle's drop marks sit lower and further apart."
