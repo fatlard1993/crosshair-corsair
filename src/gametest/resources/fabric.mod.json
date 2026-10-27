@@ -8,7 +8,8 @@
 	"environment": "*",
 	"entrypoints": {
 		"fabric-client-gametest": [
-			"justfatlard.crosshair_corsair.gametest.SmokeTest"
+			"justfatlard.crosshair_corsair.gametest.SmokeTest",
+			"justfatlard.crosshair_corsair.gametest.ModItemsDeclared"
 		]
 	},
 	"depends": {

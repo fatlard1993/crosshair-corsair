@@ -4,7 +4,10 @@ import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.LinkedHashMap;
 import java.util.Locale;
+import java.util.Map;
+import justfatlard.crosshair_corsair.crosshair.ModItems;
 import justfatlard.crosshair_corsair.integration.PandoricalSettings;
 import net.fabricmc.loader.api.FabricLoader;
 
@@ -85,6 +88,47 @@ public final class CorsairConfig {
 		public boolean blend = true;
 
 		public Styles styles = new Styles();
+
+		/**
+		 * Items other mods declared a crosshair for, by declaration id. Kept after the mod is gone:
+		 * a server's items come and go with the server, and the choice should be there on return.
+		 */
+		public Map<String, ModItemSetting> modItems = new LinkedHashMap<>();
+
+		public static final class ModItemSetting {
+			public String policy;
+			public String style;
+
+			ModItemSetting(String policy, String style) {
+				this.policy = policy;
+				this.style = style;
+			}
+		}
+
+		/** The player's setting for this mod item, starting from what its mod declared. */
+		public ModItemSetting modItem(ModItems.ModItem item) {
+			return modItems.computeIfAbsent(item.id(), id -> new ModItemSetting(item.policy(), item.style()));
+		}
+
+		/**
+		 * Every declared mod item in the file, with anything missing from a hand edit filled in.
+		 *
+		 * @return whether anything changed, which the file then needs to hear about
+		 */
+		public boolean adoptModItems() {
+			boolean changed = false;
+			for (ModItems.ModItem item : ModItems.all()) {
+				ModItemSetting setting = modItems.get(item.id());
+				if (setting == null) {
+					modItems.put(item.id(), new ModItemSetting(item.policy(), item.style()));
+					changed = true;
+					continue;
+				}
+				if (setting.policy == null) { setting.policy = item.policy(); changed = true; }
+				if (setting.style == null) { setting.style = item.style(); changed = true; }
+			}
+			return changed;
+		}
 
 		/** Gson reads the old true/false into the word as "true" or "false". */
 		void carryOldMeleeSetting() {
@@ -244,6 +288,7 @@ public final class CorsairConfig {
 				// looking for exists, and so a hand-deleted file resets to defaults rather than
 				// leaving the mod running on settings with no visible source.
 				current = new CorsairConfig();
+				current.crosshair.adoptModItems();
 				write(path, current);
 				return;
 			}
@@ -262,6 +307,8 @@ public final class CorsairConfig {
 			if (loaded.reacharound == null) loaded.reacharound = new Reacharound();
 			if (loaded.crosshair == null) loaded.crosshair = new Crosshair();
 			if (loaded.crosshair.styles == null) loaded.crosshair.styles = new Crosshair.Styles();
+			if (loaded.crosshair.modItems == null) loaded.crosshair.modItems = new LinkedHashMap<>();
+			loaded.crosshair.adoptModItems();
 			loaded.crosshair.carryOldMeleeSetting();
 
 			loaded.derive();

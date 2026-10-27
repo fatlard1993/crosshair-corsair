@@ -1,0 +1,6 @@
+{
+  "items": ["minecraft:stick"],
+  "like": "throwable",
+  "style": "diamond",
+  "policy": "always"
+}

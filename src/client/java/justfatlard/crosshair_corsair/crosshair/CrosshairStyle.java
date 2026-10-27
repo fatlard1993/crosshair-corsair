@@ -56,15 +56,9 @@ public enum CrosshairStyle {
 		this.height = WIDTH;
 	}
 
-	/**
-	 * The shape's own texture, for drawing it somewhere that is not the hud.
-	 *
-	 * <p>A sprite id and a texture path are not the same string: the hud draws these off the gui
-	 * atlas, and a menu wanting to show one needs the file. Built from the sprite so the two
-	 * cannot drift; CROSS points at vanilla's, which lives under its own namespace.
-	 */
+	/** The shape's own texture, for drawing it somewhere that is not the hud. */
 	public String texture() {
-		return sprite.getNamespace() + ":textures/gui/sprites/" + sprite.getPath() + ".png";
+		return Shape.of(this).texture();
 	}
 
 	/** The name this style goes by in the config file. */

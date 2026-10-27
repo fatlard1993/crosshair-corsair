@@ -59,9 +59,9 @@ public final class CrosshairElement implements HudElement {
 
 		if (crosshair) {
 			RenderPipeline pipeline = config.blend ? RenderPipelines.CROSSHAIR : RenderPipelines.GUI_TEXTURED;
-			draw(graphics, pipeline, styleFor(reading.state(), config.styles), x, y, config);
-			if (reading.usable()) draw(graphics, pipeline, CrosshairStyle.BRACKETS_ROUND, x, y, config);
-			if (reading.correctTool()) draw(graphics, pipeline, CrosshairStyle.DOT, x, y, config);
+			draw(graphics, pipeline, shapeFor(reading, config.styles), x, y, config);
+			if (reading.usable()) draw(graphics, pipeline, Shape.of(CrosshairStyle.BRACKETS_ROUND), x, y, config);
+			if (reading.correctTool()) draw(graphics, pipeline, Shape.of(CrosshairStyle.DOT), x, y, config);
 		}
 		// The indicator is about the weapon's cooldown rather than about what is under the
 		// crosshair, so hiding the crosshair does not take it with it. It keeps vanilla's pipeline
@@ -74,12 +74,12 @@ public final class CrosshairElement implements HudElement {
 	 * centre pixel on the screen's centre, and that pixel is at the same index in every shape, so
 	 * a taller one simply reaches further down without moving anything.
 	 */
-	private static void draw(GuiGraphicsExtractor graphics, RenderPipeline pipeline, CrosshairStyle style,
+	private static void draw(GuiGraphicsExtractor graphics, RenderPipeline pipeline, Shape shape,
 			int x, int y, CorsairConfig.Crosshair config) {
 		if (config.overrideColor) {
-			graphics.blitSprite(pipeline, style.sprite, x, y, SIZE, style.height, CorsairConfig.get().crosshairArgb());
+			graphics.blitSprite(pipeline, shape.sprite(), x, y, SIZE, shape.height(), CorsairConfig.get().crosshairArgb());
 		} else {
-			graphics.blitSprite(pipeline, style.sprite, x, y, SIZE, style.height);
+			graphics.blitSprite(pipeline, shape.sprite(), x, y, SIZE, shape.height());
 		}
 	}
 
@@ -110,8 +110,9 @@ public final class CrosshairElement implements HudElement {
 		return range.isInRange(mc.player, mc.hitResult.getLocation());
 	}
 
-	private static CrosshairStyle styleFor(CrosshairContext.State state, CorsairConfig.Crosshair.Styles styles) {
-		return CrosshairStyle.named(switch (state) {
+	private static Shape shapeFor(CrosshairContext.Reading reading, CorsairConfig.Crosshair.Styles styles) {
+		if (reading.style() != null) return Shape.named(reading.style());
+		return Shape.named(switch (reading.state()) {
 			case ON_BLOCK -> styles.onBlock;
 			case ON_INTERACTABLE_BLOCK -> styles.onInteractableBlock;
 			case ON_ENTITY -> styles.onEntity;

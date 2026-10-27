@@ -1,6 +1,7 @@
 package justfatlard.crosshair_corsair;
 
 import justfatlard.crosshair_corsair.crosshair.CrosshairElement;
+import justfatlard.crosshair_corsair.crosshair.ModItems;
 import justfatlard.crosshair_corsair.integration.PandoricalSettings;
 import justfatlard.crosshair_corsair.reach.ToggleKey;
 import justfatlard.crosshair_corsair.render.BlockOutlines;
@@ -9,6 +10,8 @@ import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.HudElementRegistry;
 import net.fabricmc.fabric.api.client.rendering.v1.hud.VanillaHudElements;
 import net.fabricmc.fabric.api.client.rendering.v1.level.LevelRenderEvents;
+import net.fabricmc.fabric.api.resource.ResourceManagerHelper;
+import net.minecraft.server.packs.PackType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -42,6 +45,7 @@ public class Main implements ClientModInitializer {
 
 		ToggleKey.register();
 		PandoricalSettings.register();
+		ResourceManagerHelper.get(PackType.CLIENT_RESOURCES).registerReloadListener(new ModItems());
 
 		LevelRenderEvents.BEFORE_BLOCK_OUTLINE.register(BlockOutlines::beforeBlockOutline);
 		// The crosshair itself, in vanilla's slot so it keeps vanilla's order against the rest of

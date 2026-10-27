@@ -63,12 +63,21 @@ public final class CrosshairContext {
 	public enum State {
 		HIDDEN, REGULAR, ON_BLOCK, ON_INTERACTABLE_BLOCK, ON_ENTITY,
 		HOLDING_TOOL, HOLDING_MELEE_WEAPON, HOLDING_RANGED_WEAPON, HOLDING_THROWABLE,
-		HOLDING_SHIELD, HOLDING_BLOCK, HOLDING_USABLE_ITEM,
+		HOLDING_SHIELD, HOLDING_BLOCK, HOLDING_USABLE_ITEM, HOLDING_MOD_ITEM,
 		REACHAROUND_FLOOR, REACHAROUND_CEILING
 	}
 
-	/** The state to draw, and the two overlays that ride on top of whichever shape it takes. */
-	public record Reading(State state, boolean correctTool, boolean usable) {}
+	/**
+	 * The state to draw, and the two overlays that ride on top of whichever shape it takes.
+	 *
+	 * @param style the shape a mod item's setting names; null for every other state, whose shape
+	 *              is the state's own setting
+	 */
+	public record Reading(State state, boolean correctTool, boolean usable, String style) {
+		Reading(State state, boolean correctTool, boolean usable) {
+			this(state, correctTool, usable, null);
+		}
+	}
 
 	private enum Target { NONE, BLOCK, ENTITY }
 
@@ -97,6 +106,8 @@ public final class CrosshairContext {
 		boolean blockInteractable = block != null && interactable(block, level, at);
 		boolean entityInteractable = entity != null && interactable(entity, main);
 		boolean entityAttackable = entity != null && entity.isAttackable();
+		boolean throwsAt = entityAttackable || target == Target.BLOCK;
+		boolean useActs = main.has(DataComponents.CONSUMABLE) || blockInteractable || entityInteractable;
 		boolean brackets = config.usableBrackets;
 
 		// The hand first: what you are holding says what you mean to do. A shield only counts when
@@ -104,12 +115,32 @@ public final class CrosshairContext {
 		if (config.holdingShield && (blocks(main) || (main.isEmpty() && blocks(off)))) {
 			return new Reading(State.HOLDING_SHIELD, false, false);
 		}
+		// A mod's word for its own item outranks a guess from its class: on a Pandorical client a
+		// server mod's item is a plain stand-in, and the guess would be "nothing". Its policy
+		// saying no hands it back to whatever the crosshair would have shown without it.
+		ModItems.ModItem modItem = ModItems.of(main);
+		if (modItem != null) {
+			CorsairConfig.Crosshair.ModItemSetting setting = config.modItem(modItem);
+			Policy.Facts facts = switch (modItem.like()) {
+				case THROWABLE -> new Policy.Facts(targeting, throwsAt);
+				case RANGED_WEAPON, MELEE_WEAPON -> new Policy.Facts(targeting, entityAttackable);
+				case USABLE_ITEM -> new Policy.Facts(targeting, useActs);
+			};
+			if (Policy.named(setting.policy).shows(facts)) {
+				boolean usable = brackets && switch (modItem.like()) {
+					case MELEE_WEAPON -> blockInteractable;
+					case USABLE_ITEM -> useActs;
+					default -> false;
+				};
+				return new Reading(State.HOLDING_MOD_ITEM, false, usable, setting.style);
+			}
+		}
 		if (main.getItem() instanceof ProjectileWeaponItem && Policy.named(config.holdingRangedWeapon)
 				.shows(new Policy.Facts(targeting, entityAttackable))) {
 			return new Reading(State.HOLDING_RANGED_WEAPON, false, false);
 		}
 		if (main.getItem() instanceof ProjectileItem && Policy.named(config.holdingThrowable)
-				.shows(new Policy.Facts(targeting, entityAttackable || target == Target.BLOCK))) {
+				.shows(new Policy.Facts(targeting, throwsAt))) {
 			return new Reading(State.HOLDING_THROWABLE, false, false);
 		}
 
@@ -154,9 +185,8 @@ public final class CrosshairContext {
 		}
 		if (usable(main)) {
 			// Narrower than targeting, never wider: the item has to have something to act on.
-			boolean acts = main.has(DataComponents.CONSUMABLE) || blockInteractable || entityInteractable;
-			if (Policy.named(config.holdingUsableItem).shows(new Policy.Facts(targeting, acts))) {
-				return new Reading(State.HOLDING_USABLE_ITEM, false, acts && brackets);
+			if (Policy.named(config.holdingUsableItem).shows(new Policy.Facts(targeting, useActs))) {
+				return new Reading(State.HOLDING_USABLE_ITEM, false, useActs && brackets);
 			}
 		}
 

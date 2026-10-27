@@ -1,14 +1,19 @@
 package justfatlard.crosshair_corsair.integration;
 
+import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 import justfatlard.crosshair_corsair.CorsairConfig;
 import justfatlard.crosshair_corsair.Main;
 import justfatlard.crosshair_corsair.crosshair.CrosshairStyle;
+import justfatlard.crosshair_corsair.crosshair.ModItems;
 import justfatlard.crosshair_corsair.crosshair.Policy;
+import justfatlard.crosshair_corsair.crosshair.Shape;
 import net.fabricmc.loader.api.FabricLoader;
 
 /**
@@ -47,20 +52,80 @@ public final class PandoricalSettings {
 		}
 	}
 
+	/**
+	 * Mod items' settings, added as their mods' assets load: on a server that ships them, that is
+	 * after the rest of the menu was built. Each is added once, however many reloads follow.
+	 */
+	public static void modItems(List<ModItems.ModItem> items) {
+		if (!available) return;
+		try {
+			Reach.modItems(items);
+		} catch (LinkageError incompatible) {
+			available = false;
+		}
+	}
+
 	private static final class Reach {
+		private static final Set<String> listed = new HashSet<>();
+
 		static void changed() {
 			justfatlard.pandorical.client.api.PandoricalClientApi.settings().changed();
 		}
 
-		static void register() {
-			var group = justfatlard.pandorical.client.api.PandoricalClientApi.settings()
+		private static justfatlard.pandorical.client.api.ClientSettingsApi.Group group() {
+			return justfatlard.pandorical.client.api.PandoricalClientApi.settings()
 				.group(Main.MOD_ID, "Crosshair Corsair");
+		}
 
+		private static Map<String, String> policies() {
 			Map<String, String> policies = new LinkedHashMap<>();
 			policies.put(Policy.ALWAYS.configName(), "Always");
 			policies.put(Policy.TARGETING.configName(), "When aimed at something");
 			policies.put(Policy.INTERACTABLE.configName(), "When it would work");
 			policies.put(Policy.NEVER.configName(), "Never");
+			return policies;
+		}
+
+		static void modItems(List<ModItems.ModItem> items) {
+			var group = group();
+			boolean added = false;
+			for (ModItems.ModItem item : items) {
+				if (!listed.add(item.id())) continue;
+				added = true;
+				String wouldWork = switch (item.like()) {
+					case THROWABLE -> "aimed at a block or something you can hit";
+					case RANGED_WEAPON, MELEE_WEAPON -> "aimed at something you can hit";
+					case USABLE_ITEM -> "something to use it on";
+				};
+				String article = "aeiou".indexOf(item.name().charAt(0)) >= 0 ? "an " : "a ";
+				held(group, policies(), "mod/" + item.id(), "Holding " + article + item.name(), wouldWork,
+					() -> c().modItem(item).policy, v -> c().modItem(item).policy = v);
+
+				Map<String, String> styles = new LinkedHashMap<>();
+				Map<String, String> shapes = new LinkedHashMap<>();
+				Shape own = item.ownShape();
+				if (own != null) {
+					styles.put(item.style(), "the mod's own");
+					shapes.put(item.style(), own.texture());
+				}
+				for (CrosshairStyle style : CrosshairStyle.values()) {
+					shapes.put(style.configName(), style.texture());
+					styles.put(style.configName(), style.label());
+				}
+				group.choice("modStyle/" + item.id(), "Shape: " + item.name(), null, styles, shapes,
+					() -> {
+						String style = c().modItem(item).style;
+						return styles.containsKey(style) ? style : CrosshairStyle.named(style).configName();
+					},
+					saving(v -> c().modItem(item).style = v));
+			}
+			if (added) changed();
+		}
+
+		static void register() {
+			var group = group();
+
+			Map<String, String> policies = policies();
 			Map<String, String> styles = new LinkedHashMap<>();
 			// Beside every shape's name, the shape. Fourteen settings all offering the same
 			// nineteen options is a lot of reading to find out what "brackets round" looks like.

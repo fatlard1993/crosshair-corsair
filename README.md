@@ -32,6 +32,25 @@ The attack indicator stays where vanilla puts it, under the same option and on v
 
 Pandorical's synced blocks tell the client whether the server answers their click, and the crosshair believes them - which is the one thing a client can know exactly about a block it has never seen the inside of.
 
+## Mod items
+
+Other mods can say what crosshair their own items should get: Fletch Craft's throwing knives take the throwable circle, and Redstone Photography's camera brings a viewfinder of its own. Each one gets a policy and a shape of its own, in the file under `modItems` and in the mod menu, starting from what the mod suggested. `never` hands the item back to whatever the crosshair would have shown without it. The settings stay in the file after the mod is gone, because a server's items come and go with the server.
+
+This works on servers too. A Pandorical server mod sends its assets to your client, and the declaration travels with them, so you don't need the mod installed yourself.
+
+For a mod author, it is one file at `assets/<namespace>/crosshair_corsair/<name>.json`, with no code and no dependency on this mod:
+
+```json
+{
+  "items": ["fletch_craft:flint_throwing_knife", "fletch_craft:obsidian_throwing_knife"],
+  "like": "throwable",
+  "style": "circle_large",
+  "policy": "interactable"
+}
+```
+
+`like` is the built-in item it behaves as, `throwable`, `ranged_weapon`, `melee_weapon` or `usable_item`, and it decides what `interactable` means for it. `style` and `policy` are optional and default to that item's. `style` also takes a sprite id, `namespace:path` under `textures/gui/sprites/`, for a shape the mod drew itself: white on transparent, fifteen pixels square, centre on the centre pixel. The menu names the item after the file.
+
 ## Selection box
 
 Colour, opacity and line thickness for the block outline, or no outline at all. A blink, if you want one: the opacity swings by `blinkAlpha` `blinkSpeed` times a second. And a break animation, `breakAnimation`: as the block under the box is mined, the box can `shrink` to its centre, sink `down` into the ground, or fade with `alpha`; `none` is vanilla's fixed box. Drawing the box through walls is not offered: this version keeps the line pipeline that would need behind private doors.
@@ -98,6 +117,12 @@ Every setting but the colours is also in Pandorical's mod menu, under Crosshair 
       "holdingUsableItem": "cross",
       "reacharoundFloor": "line_bottom",
       "reacharoundCeiling": "caret"
+    },
+    "modItems": {
+      "fletch_craft:throwing_knife": {
+        "policy": "interactable",
+        "style": "circle_large"
+      }
     }
   }
 }
