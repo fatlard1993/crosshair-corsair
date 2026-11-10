@@ -4,6 +4,9 @@
     "Client-side only. Nothing needs to be installed on the server."
   ],
   "versions": {
+    "1.2.1": [
+      "Drop changelog notes for changes nothing in the game shows."
+    ],
     "1.2.0": [
       "Other mods can give their own items a crosshair: throwing knives take the throwable circle, and a camera brings a viewfinder of its own. Each such item gets its own policy and shape in the mod menu, starting from what its mod suggested.",
       "This works on servers too: a Pandorical server mod's items bring their crosshair with them, without the mod installed on your side."
