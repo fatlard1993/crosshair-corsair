@@ -231,7 +231,7 @@ public final class CrosshairContext {
 	private static boolean interactable(BlockState state, Level level, BlockPos pos) {
 		if (PandoricalBlocks.isInteractive(state)) return true;
 		var block = state.getBlock();
-		// The kinds first: asking for a menu builds one, and this runs every frame.
+		// The kinds first: asking for a menu provider builds one, and this runs every frame.
 		return block instanceof DoorBlock || block instanceof TrapDoorBlock || block instanceof FenceGateBlock
 			|| block instanceof ButtonBlock || block instanceof LeverBlock || block instanceof BedBlock
 			|| block instanceof CraftingTableBlock || block instanceof AnvilBlock || block instanceof BellBlock
