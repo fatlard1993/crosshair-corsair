@@ -1,6 +1,10 @@
 package justfatlard.crosshair_corsair.crosshair;
 
+import java.util.Arrays;
 import java.util.Locale;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * When a held item's crosshair shows.
@@ -34,13 +38,13 @@ public enum Policy {
 		};
 	}
 
+	/** Read on every frame the crosshair draws, so an unknown word costs a lookup and not a throw. */
+	private static final Map<String, Policy> BY_NAME = Arrays.stream(values())
+		.collect(Collectors.toUnmodifiableMap(Enum::name, Function.identity()));
+
 	public static Policy named(String name) {
 		if (name == null) return ALWAYS;
-		try {
-			return valueOf(name.trim().toUpperCase(Locale.ROOT));
-		} catch (IllegalArgumentException unknown) {
-			return ALWAYS;
-		}
+		return BY_NAME.getOrDefault(name.trim().toUpperCase(Locale.ROOT), ALWAYS);
 	}
 
 	public String configName() {

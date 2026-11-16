@@ -1,6 +1,10 @@
 package justfatlard.crosshair_corsair.crosshair;
 
+import java.util.Arrays;
 import java.util.Locale;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 import justfatlard.crosshair_corsair.Main;
 import net.minecraft.resources.Identifier;
@@ -71,13 +75,13 @@ public enum CrosshairStyle {
 		return configName().replace('_', ' ');
 	}
 
+	/** Read on every frame the crosshair draws, so a name nobody drew costs a lookup and not a throw. */
+	private static final Map<String, CrosshairStyle> BY_NAME = Arrays.stream(values())
+		.collect(Collectors.toUnmodifiableMap(Enum::name, Function.identity()));
+
 	/** The style with this config name, or the plain cross for a name nobody drew. */
 	public static CrosshairStyle named(String name) {
 		if (name == null) return CROSS;
-		try {
-			return valueOf(name.trim().toUpperCase(Locale.ROOT).replace('-', '_'));
-		} catch (IllegalArgumentException unknown) {
-			return CROSS;
-		}
+		return BY_NAME.getOrDefault(name.trim().toUpperCase(Locale.ROOT).replace('-', '_'), CROSS);
 	}
 }
