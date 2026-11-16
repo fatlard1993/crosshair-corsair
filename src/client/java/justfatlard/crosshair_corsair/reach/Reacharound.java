@@ -83,12 +83,32 @@ public final class Reacharound {
 	/** What the click would do: land where promised, land there but be refused, or land elsewhere. */
 	private enum Outcome { LANDS, BLOCKED, ELSEWHERE }
 
+	private static HitResult frameHit;
+	private static Target frameTarget;
+
+	/**
+	 * {@link #find}, answered once per frame for the outline and the crosshair that both draw it.
+	 *
+	 * <p>Keyed on the hit result, which the game picks afresh every frame, so the answer is never
+	 * older than the frame it is drawn in. The click itself asks {@link #find} directly: it runs in
+	 * a tick, and a placement changes the answer.
+	 */
+	public static Target findForFrame(Minecraft minecraft) {
+		if (minecraft.player == null) return null;
+		HitResult hit = minecraft.hitResult;
+		if (hit == null || hit != frameHit) {
+			frameTarget = find(minecraft);
+			frameHit = hit;
+		}
+		return frameTarget;
+	}
+
 	/**
 	 * The reacharound placement available right now, or null if there is not one.
 	 *
-	 * <p>Called per frame rather than cached, which is what keeps the outline honest while the
-	 * player is still turning. Everything past the {@code MISS} gate only runs on frames where the
-	 * crosshair is already on open sky.
+	 * <p>Asked every frame rather than cached across them, which is what keeps the outline honest
+	 * while the player is still turning. Everything past the {@code MISS} gate only runs on frames
+	 * where the crosshair is already on open sky.
 	 */
 	public static Target find(Minecraft minecraft) {
 		CorsairConfig.Reacharound settings = CorsairConfig.get().reacharound;

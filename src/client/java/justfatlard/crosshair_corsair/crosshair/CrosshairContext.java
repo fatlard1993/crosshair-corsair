@@ -153,7 +153,7 @@ public final class CrosshairContext {
 					// The click would bridge. Its own state, because a square where nothing is says
 					// "a block goes here" and the point of the reacharound is that it goes somewhere
 					// you are not looking: at your feet, or over your head.
-					Reacharound.Target reach = Reacharound.find(mc);
+					Reacharound.Target reach = Reacharound.findForFrame(mc);
 					if (reach != null) {
 						return new Reading(reach.placeAt().getY() > player.getBlockY()
 							? State.REACHAROUND_CEILING : State.REACHAROUND_FLOOR, false, false);
@@ -230,15 +230,16 @@ public final class CrosshairContext {
 	 */
 	private static boolean interactable(BlockState state, Level level, BlockPos pos) {
 		if (PandoricalBlocks.isInteractive(state)) return true;
-		if (state.getMenuProvider(level, pos) != null) return true;
 		var block = state.getBlock();
+		// The kinds first: asking for a menu builds one, and this runs every frame.
 		return block instanceof DoorBlock || block instanceof TrapDoorBlock || block instanceof FenceGateBlock
 			|| block instanceof ButtonBlock || block instanceof LeverBlock || block instanceof BedBlock
 			|| block instanceof CraftingTableBlock || block instanceof AnvilBlock || block instanceof BellBlock
 			|| block instanceof NoteBlock || block instanceof JukeboxBlock || block instanceof LecternBlock
 			|| block instanceof CakeBlock || block instanceof FlowerPotBlock || block instanceof CampfireBlock
 			|| block instanceof ComposterBlock || block instanceof DaylightDetectorBlock
-			|| block instanceof RespawnAnchorBlock;
+			|| block instanceof RespawnAnchorBlock
+			|| state.getMenuProvider(level, pos) != null;
 	}
 
 	/** An entity a right-click does something to. */

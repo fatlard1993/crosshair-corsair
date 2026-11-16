@@ -82,7 +82,7 @@ public final class BlockOutlines {
 	private static void drawReacharoundGhost(LevelRenderContext context, CorsairConfig config) {
 		if (!config.reacharound.showGhost) return;
 
-		Reacharound.Target target = Reacharound.find(Minecraft.getInstance());
+		Reacharound.Target target = Reacharound.findForFrame(Minecraft.getInstance());
 		if (target == null) return;
 
 		int argb = target.blocked() ? config.blockedArgb() : config.ghostArgb();
