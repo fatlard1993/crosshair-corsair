@@ -3,7 +3,7 @@
   "id": "crosshair-corsair-justfatlard",
   "version": "${version}",
   "name": "Crosshair Corsair",
-  "description": "Opinionated tweaks to whatever your crosshair is pointing at: a styleable selection box, and reacharound placement for bridging without looking down.",
+  "description": "Tweaks for what your crosshair points at: a styleable outline and reach-around placing",
   "authors": [
     "justfatlard"
   ],
