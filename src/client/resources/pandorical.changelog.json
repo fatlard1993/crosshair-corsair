@@ -4,6 +4,9 @@
     "Client-side only. Nothing needs to be installed on the server."
   ],
   "versions": {
+    "1.2.3": [
+      "Describes itself in one short line of what it adds."
+    ],
     "1.2.2": [
       "A crosshair setting with a word the mod does not know falls back without throwing on every frame.",
       "The crosshair and the reacharound outline work out the placement once a frame instead of twice, and doors and buttons are known before a block is asked for its menu.",
